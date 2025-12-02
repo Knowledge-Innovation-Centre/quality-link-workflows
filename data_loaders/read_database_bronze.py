@@ -1,7 +1,7 @@
 from mage_ai.data_preparation.shared.secrets import get_secret_value
 import psycopg2
 from psycopg2 import sql
-from datetime import date
+from datetime import date, timedelta
 
 if 'data_loader' not in globals():
     from mage_ai.data_preparation.decorators import data_loader
@@ -17,7 +17,10 @@ def load_data(*args, **kwargs):
     
     try:
         today = date.today()
-        print(f"📅 Loading transactions for date: {today}")
+        # yesterday = today
+        yesterday = today - timedelta(days=1)
+
+        print(f"📅 Loading transactions for date: {yesterday}")
         
         conn = psycopg2.connect(
             host=get_secret_value("POSTGRES_HOST"),
@@ -36,7 +39,7 @@ def load_data(*args, **kwargs):
             ORDER BY created_at_date_time ASC
         """
         
-        cursor.execute(query, (today,))
+        cursor.execute(query, (yesterday,))
         rows = cursor.fetchall()
         
         results = []
