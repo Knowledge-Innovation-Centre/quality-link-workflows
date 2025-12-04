@@ -15,7 +15,7 @@ blocks:
   type: data_loader
   upstream_blocks: []
   uuid: read_database_bronze
-- all_upstream_blocks_executed: true
+- all_upstream_blocks_executed: false
   color: null
   configuration:
     file_path: transformers/extract_database_bronze.py
@@ -35,7 +35,7 @@ blocks:
   upstream_blocks:
   - read_database_bronze
   uuid: extract_database_bronze
-- all_upstream_blocks_executed: true
+- all_upstream_blocks_executed: false
   color: null
   configuration: {}
   downstream_blocks: []
