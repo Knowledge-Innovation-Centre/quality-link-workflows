@@ -10,7 +10,7 @@ blocks:
   language: python
   name: read_database_bronze
   retry_config: null
-  status: updated
+  status: executed
   timeout: null
   type: data_loader
   upstream_blocks: []
@@ -22,7 +22,7 @@ blocks:
     file_source:
       path: transformers/extract_database_bronze.py
   downstream_blocks:
-  - write_database_bronze
+  - write_jena_silver
   executor_config: null
   executor_type: local_python
   has_callback: false
@@ -37,40 +37,43 @@ blocks:
   uuid: extract_database_bronze
 - all_upstream_blocks_executed: true
   color: null
-  configuration: {}
+  configuration:
+    file_path: data_exporters/write_jena_silver.py
+    file_source:
+      path: data_exporters/write_jena_silver.py
   downstream_blocks:
-  - tmp
+  - write_meili_gold
   executor_config: null
   executor_type: local_python
   has_callback: false
   language: python
-  name: write_database_bronze
+  name: write_jena_silver
   retry_config: null
   status: executed
   timeout: null
   type: data_exporter
   upstream_blocks:
   - extract_database_bronze
-  uuid: write_database_bronze
+  uuid: write_jena_silver
 - all_upstream_blocks_executed: true
   color: null
   configuration:
-    file_path: data_exporters/tmp.py
+    file_path: data_exporters/write_meili_gold.py
     file_source:
-      path: data_exporters/tmp.py
+      path: data_exporters/write_meili_gold.py
   downstream_blocks: []
   executor_config: null
   executor_type: local_python
   has_callback: false
   language: python
-  name: tmp
+  name: write_meili_gold
   retry_config: null
-  status: updated
+  status: executed
   timeout: null
   type: data_exporter
   upstream_blocks:
-  - write_database_bronze
-  uuid: tmp
+  - write_jena_silver
+  uuid: write_meili_gold
 cache_block_output_in_memory: false
 callbacks: []
 concurrency_config: {}

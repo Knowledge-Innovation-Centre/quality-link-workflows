@@ -15,6 +15,7 @@ if 'data_exporter' not in globals():
 QL = Namespace("http://data.quality-link.eu/ontology/v1#")
 ELM = Namespace("http://data.europa.eu/snb/model/elm/")
 
+course_uuids = []
 
 def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str) -> bytes:
 
@@ -47,6 +48,7 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str) 
             graph.add((subject, QL.ingestedDate, Literal(current_date, datatype=XSD.date)))
             graph.add((subject, QL.ingestedAt, Literal(current_datetime, datatype=XSD.dateTime)))
             
+            course_uuid = None
 
             if (subject, RDF.type, QL.HigherEducationInstitution) in graph:
                 hei_count += 1
@@ -77,6 +79,9 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str) 
                 if (subject, ELM.providedBy, None) in graph:
                     graph.add((subject, QL.provider_uuid, Literal(provider_uuid)))
                     loi_with_provided_by += 1
+
+            if course_uuid is not None and course_uuid not in course_uuids:
+                course_uuids.append(course_uuid)
         
         enriched_content = graph.serialize(format=file_format, encoding='utf-8')
         
@@ -330,4 +335,5 @@ def export_data(curr_data, *args, **kwargs):
         "total": total_files,
         "fully_successful": success_count - db_update_failed_count,
         "partial_success": db_update_failed_count,
+        "course_uuids": course_uuids
     }
