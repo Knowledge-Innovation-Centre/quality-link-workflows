@@ -6,6 +6,41 @@ from pyld import jsonld
 if 'data_exporter' not in globals():
     from mage_ai.data_preparation.decorators import data_exporter
 
+
+def get_language_label(language_uri: str, query_url: str, auth: tuple) -> str:
+
+    query = f"""
+    PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+    
+    SELECT ?label
+    WHERE {{
+      <{language_uri}> skos:prefLabel ?label .
+      FILTER(lang(?label) = "en")
+    }}
+    LIMIT 1
+    """
+    
+    try:
+        response = requests.get(
+            query_url,
+            params={'query': query, 'format': 'application/sparql-results+json'},
+            auth=auth,
+            timeout=10
+        )
+        response.raise_for_status()
+        
+        results = response.json()['results']['bindings']
+        
+        if results:
+            return results[0]['label']['value']
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"      ⚠️  Failed to fetch label for {language_uri}: {e}")
+        return None
+
+
 @data_exporter
 def export_data(data, *args, **kwargs):
     FUSEKI_URL = get_secret_value("FUSEKI_URL")
@@ -31,6 +66,7 @@ def export_data(data, *args, **kwargs):
         return {
             "retrieved": 0,
             "framed": 0,
+            "enriched": 0,
             "uploaded": 0,
             "failed": 0,
             "course_uuids": []
@@ -117,6 +153,7 @@ def export_data(data, *args, **kwargs):
         return {
             "retrieved": 0,
             "framed": 0,
+            "enriched": 0,
             "uploaded": 0,
             "failed": len(course_uuids),
             "course_uuids": course_uuids
@@ -200,12 +237,12 @@ def export_data(data, *args, **kwargs):
         return {
             "retrieved": 0,
             "framed": 0,
+            "enriched": 0,
             "uploaded": 0,
             "failed": len(course_uuids),
             "course_uuids": course_uuids
         }
     
-
     print(f"\n{'='*60}")
     print("🔄 STEP 3: Applying JSON-LD framing")
     print(f"{'='*60}")
@@ -225,7 +262,6 @@ def export_data(data, *args, **kwargs):
         try:
             print(f"   🔄 Applying JSON-LD framing...")
             framed_json = jsonld.frame(raw_jsonld, frame_config)
-
             print(f"   ✅ Framing successful")
             
             if '@context' in framed_json:
@@ -263,10 +299,71 @@ def export_data(data, *args, **kwargs):
         return {
             "retrieved": len(all_documents),
             "framed": 0,
+            "enriched": 0,
             "uploaded": 0,
             "failed": len(all_documents),
             "course_uuids": course_uuids
         }
+    
+    
+    print(f"\n{'='*60}")
+    print("🏷️  STEP 3.5: Enriching with language labels")
+    print(f"{'='*60}")
+    
+    enriched_count = 0
+    enrichment_failed = 0
+    
+    for idx, doc in enumerate(framed_documents, 1):
+        course_uuid = doc.get('id', 'unknown')
+        
+        print(f"\n[{idx}/{len(framed_documents)}] Enriching course: {course_uuid}")
+        
+        language_field = doc.get('dcterms:language')
+        
+        if not language_field:
+            print(f"   ⚠️  No dcterms:language field, skipping")
+            continue
+        
+        try:
+            if isinstance(language_field, list):
+                print(f"   🔍 Found {len(language_field)} language URIs")
+                labels = []
+                
+                for lang_uri in language_field:
+                    label = get_language_label(lang_uri, query_url, auth)
+                    if label:
+                        labels.append(label)
+                        print(f"      ✅ {lang_uri} → {label}")
+                    else:
+                        print(f"      ⚠️  No label found for {lang_uri}")
+                
+                if labels:
+                    doc['dcterms:languageLabel'] = labels
+                    enriched_count += 1
+                    print(f"   ✅ Added {len(labels)} language label(s)")
+                else:
+                    print(f"   ⚠️  No labels found for any language URI")
+                    enrichment_failed += 1
+                    
+            else:
+                print(f"   🔍 Found language URI: {language_field}")
+                label = get_language_label(language_field, query_url, auth)
+                
+                if label:
+                    doc['dcterms:languageLabel'] = label
+                    enriched_count += 1
+                    print(f"   ✅ Added language label: {label}")
+                else:
+                    print(f"   ⚠️  No label found for {language_field}")
+                    enrichment_failed += 1
+                    
+        except Exception as e:
+            print(f"   ❌ Enrichment error: {e}")
+            enrichment_failed += 1
+            continue
+    
+    print(f"\n✅ Successfully enriched {enriched_count}/{len(framed_documents)} documents")
+    print(f"⚠️  Enrichment skipped/failed: {enrichment_failed}")
     
     
     print(f"\n{'='*60}")
@@ -293,6 +390,13 @@ def export_data(data, *args, **kwargs):
         
         print(f"\n[{idx}/{len(framed_documents)}] Uploading: {str(title)[:60]}...")
         print(f"   Course UUID: {course_uuid}")
+        
+        if 'dcterms:languageLabel' in doc:
+            lang_label = doc['dcterms:languageLabel']
+            if isinstance(lang_label, list):
+                print(f"   🏷️  Languages: {', '.join(lang_label)}")
+            else:
+                print(f"   🏷️  Language: {lang_label}")
         
         try:
             response = requests.post(upload_url, headers=headers, json=doc)
@@ -321,11 +425,13 @@ def export_data(data, *args, **kwargs):
     print(f"🔍 URIs found:                {len(course_uri_mapping)}")
     print(f"✅ Successfully retrieved:    {len(all_documents)}")
     print(f"🔄 Successfully framed:       {len(framed_documents)}")
+    print(f"🏷️  Successfully enriched:     {enriched_count}")
     print(f"🚀 Successfully uploaded:     {uploaded_count}")
-    print(f"❌ Failed operations:         {(len(course_uuids) - len(course_uri_mapping)) + retrieval_failed + framing_failed + upload_failed}")
+    print(f"❌ Failed operations:         {(len(course_uuids) - len(course_uri_mapping)) + retrieval_failed + framing_failed + enrichment_failed + upload_failed}")
     print(f"   - URI lookup failures:     {len(course_uuids) - len(course_uri_mapping)}")
     print(f"   - Retrieval failures:      {retrieval_failed}")
     print(f"   - Framing failures:        {framing_failed}")
+    print(f"   - Enrichment failures:     {enrichment_failed}")
     print(f"   - Upload failures:         {upload_failed}")
     print(f"{'='*60}")
     
@@ -334,12 +440,14 @@ def export_data(data, *args, **kwargs):
         "uris_found": len(course_uri_mapping),
         "retrieved": len(all_documents),
         "framed": len(framed_documents),
+        "enriched": enriched_count,
         "uploaded": uploaded_count,
         "failed_uri_lookups": len(course_uuids) - len(course_uri_mapping),
         "failed_retrievals": retrieval_failed,
         "failed_framing": framing_failed,
+        "failed_enrichment": enrichment_failed,
         "failed_uploads": upload_failed,
-        "total_failed": (len(course_uuids) - len(course_uri_mapping)) + retrieval_failed + framing_failed + upload_failed,
+        "total_failed": (len(course_uuids) - len(course_uri_mapping)) + retrieval_failed + framing_failed + enrichment_failed + upload_failed,
         "course_uuids": course_uuids,
         "success_rate": f"{(uploaded_count / len(course_uuids) * 100):.1f}%" if course_uuids else "0%"
     }
