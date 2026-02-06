@@ -198,9 +198,12 @@ def export_data(curr_data, *args, **kwargs):
             if file_path.endswith('.ttl'):
                 content_type = 'text/turtle'
                 rdf_format = 'turtle'
-            elif file_path.endswith('.rdf'):
+            elif file_path.endswith('.rdf') or file_path.endswith('.xml'):
                 content_type = 'application/rdf+xml'
                 rdf_format = 'xml'
+            elif file_path.endswith('.json') or file_path.endswith('.jsonld'):
+                content_type = 'application/ld+json'
+                rdf_format = 'json-ld'
             else:
                 print(f"⚠️ Unknown file type for {file_path}, skipping")
                 failed_count += 1

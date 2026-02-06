@@ -10,7 +10,7 @@ blocks:
   language: python
   name: read_database_bronze
   retry_config: null
-  status: updated
+  status: executed
   timeout: null
   type: data_loader
   upstream_blocks: []
@@ -49,7 +49,7 @@ blocks:
   language: python
   name: write_jena_silver
   retry_config: null
-  status: executed
+  status: updated
   timeout: null
   type: data_exporter
   upstream_blocks:
