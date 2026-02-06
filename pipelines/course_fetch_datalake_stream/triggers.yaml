@@ -1,0 +1,14 @@
+triggers:
+- description: null
+  envs: []
+  last_enabled_at: 2025-12-01 14:00:46.160099+00:00
+  name: datalake_queue_trigger
+  pipeline_uuid: course_fetch_datalake_stream
+  schedule_interval: '@once'
+  schedule_type: time
+  settings: null
+  sla: null
+  start_time: 2025-10-30 09:12:00+00:00
+  status: active
+  token: 25ac6b3ca4ac4a9aae5b6d16599287c2
+  variables: {}

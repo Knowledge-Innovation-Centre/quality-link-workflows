@@ -1,0 +1,31 @@
+triggers:
+- description: null
+  envs: []
+  last_enabled_at: 2025-11-06 09:04:22.050406+00:00
+  name: manual_refresh
+  pipeline_uuid: provider_fetch_database_batch
+  schedule_interval: '@once'
+  schedule_type: time
+  settings: null
+  sla: null
+  start_time: 2025-11-05 09:04:00+00:00
+  status: inactive
+  token: b4e791b50486457c942937439ac9db0d
+  variables:
+    DEQAR_URL: https://backend.testzone.eqar.eu/connectapi/v1/providers/
+    QL_BUCKET_NAME: quality-link-storage
+- description: null
+  envs: []
+  last_enabled_at: 2025-11-03 08:10:30.042692+00:00
+  name: database_provider_trigger
+  pipeline_uuid: provider_fetch_database_batch
+  schedule_interval: '@daily'
+  schedule_type: time
+  settings: null
+  sla: null
+  start_time: 2025-11-04 02:00:00+00:00
+  status: active
+  token: 04961bfc538340f5b0aaf5bdaa303d66
+  variables:
+    DEQAR_URL: https://backend.testzone.eqar.eu/connectapi/v1/providers/
+    QL_BUCKET_NAME: quality-link-storage

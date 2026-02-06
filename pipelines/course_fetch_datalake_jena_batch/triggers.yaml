@@ -1,0 +1,14 @@
+triggers:
+- description: null
+  envs: []
+  last_enabled_at: 2025-12-04 09:21:48.164899+00:00
+  name: datalake_jena_trigger
+  pipeline_uuid: course_fetch_datalake_jena_batch
+  schedule_interval: '@daily'
+  schedule_type: time
+  settings: null
+  sla: null
+  start_time: 2025-12-03 02:00:00+00:00
+  status: active
+  token: ca7e3d74a31a42eea8c8c6cd6aaea860
+  variables: {}
