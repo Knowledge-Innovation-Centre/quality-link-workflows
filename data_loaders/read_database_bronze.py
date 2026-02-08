@@ -1,4 +1,4 @@
-from mage_ai.data_preparation.shared.secrets import get_secret_value
+import os
 import psycopg2
 from psycopg2 import sql
 from datetime import date, timedelta
@@ -23,10 +23,10 @@ def load_data(*args, **kwargs):
         print(f"📅 Loading transactions for date: {yesterday}")
         
         conn = psycopg2.connect(
-            host=get_secret_value("POSTGRES_HOST"),
-            database=get_secret_value("POSTGRES_DB_NAME"),
-            user=get_secret_value("POSTGRES_USER"),
-            password=get_secret_value("POSTGRES_PASSWORD")
+            host=os.environ.get("POSTGRES_HOST"),
+            database=os.environ.get("POSTGRES_DB_NAME"),
+            user=os.environ.get("POSTGRES_USER"),
+            password=os.environ.get("POSTGRES_PASSWORD")
         )
         cursor = conn.cursor()
         

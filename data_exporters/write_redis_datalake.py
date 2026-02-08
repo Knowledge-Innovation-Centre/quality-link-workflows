@@ -1,6 +1,6 @@
+import os
 from mage_ai.streaming.sinks.base_python import BasePythonSink
 from typing import Callable, Dict, List
-from mage_ai.data_preparation.shared.secrets import get_secret_value
 import psycopg2
 from psycopg2 import errors
 
@@ -13,10 +13,10 @@ class CustomSink(BasePythonSink):
     def init_client(self):
 
         self.db_config = {
-            "host": get_secret_value("POSTGRES_HOST"),
-            "database": get_secret_value("POSTGRES_DB_NAME"),
-            "user": get_secret_value("POSTGRES_USER"),
-            "password": get_secret_value("POSTGRES_PASSWORD")
+            "host": os.environ.get("POSTGRES_HOST"),
+            "database": os.environ.get("POSTGRES_DB_NAME"),
+            "user": os.environ.get("POSTGRES_USER"),
+            "password": os.environ.get("POSTGRES_PASSWORD")
         }
         print("✅ Database config initialized")
 

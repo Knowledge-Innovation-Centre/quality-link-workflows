@@ -1,4 +1,4 @@
-from mage_ai.data_preparation.shared.secrets import get_secret_value
+import os
 from minio import Minio
 from minio.error import S3Error
 import requests
@@ -118,9 +118,9 @@ def export_data(curr_data, *args, **kwargs):
 
     try:
         minio_client = Minio(
-            get_secret_value("MINIO_HOST"),
-            access_key=get_secret_value("MINIO_ROOT_USER"),
-            secret_key=get_secret_value("MINIO_ROOT_PASSWORD"),
+            os.environ.get("MINIO_HOST"),
+            access_key=os.environ.get("MINIO_ROOT_USER"),
+            secret_key=os.environ.get("MINIO_ROOT_PASSWORD"),
             secure=False
         )
         print("✅ Connected to MinIO")
@@ -140,10 +140,10 @@ def export_data(curr_data, *args, **kwargs):
     pg_cursor = None
     try:
         pg_conn = psycopg2.connect(
-            host=get_secret_value("POSTGRES_HOST"),
-            database=get_secret_value("POSTGRES_DB_NAME"),
-            user=get_secret_value("POSTGRES_USER"),
-            password=get_secret_value("POSTGRES_PASSWORD")
+            host=os.environ.get("POSTGRES_HOST"),
+            database=os.environ.get("POSTGRES_DB_NAME"),
+            user=os.environ.get("POSTGRES_USER"),
+            password=os.environ.get("POSTGRES_PASSWORD")
         )
         pg_cursor = pg_conn.cursor()
         print("✅ Connected to PostgreSQL")
@@ -152,12 +152,12 @@ def export_data(curr_data, *args, **kwargs):
         print("⚠️ Continuing without database updates")
     
 
-    fuseki_url = get_secret_value("FUSEKI_URL")
-    fuseki_username = get_secret_value("FUSEKI_USERNAME")
-    fuseki_password = get_secret_value("FUSEKI_PASSWORD")
+    fuseki_url = os.environ.get("FUSEKI_URL")
+    fuseki_username = os.environ.get("FUSEKI_USERNAME")
+    fuseki_password = os.environ.get("FUSEKI_PASSWORD")
     
-    bucket_name = "quality-link-storage"
-    dataset_name = "pipeline-data"
+    bucket_name = os.environ.get("MINIO_BUCKET_NAME")
+    dataset_name = os.environ.get("FUSEKI_DATASET_NAME")
     upload_url = f"{fuseki_url}/{dataset_name}/data"
     
     auth = None

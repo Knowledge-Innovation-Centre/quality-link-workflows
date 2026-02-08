@@ -1,4 +1,4 @@
-from mage_ai.data_preparation.shared.secrets import get_secret_value
+import os
 import requests
 import json
 from pyld import jsonld
@@ -43,14 +43,14 @@ def get_language_label(language_uri: str, query_url: str, auth: tuple) -> str:
 
 @data_exporter
 def export_data(data, *args, **kwargs):
-    FUSEKI_URL = get_secret_value("FUSEKI_URL")
-    FUSEKI_USERNAME = get_secret_value("FUSEKI_USERNAME")
-    FUSEKI_PASSWORD = get_secret_value("FUSEKI_PASSWORD")
-    DATASET_NAME = "pipeline-data"
-    
-    MEILISEARCH_URL = get_secret_value("MEILISEARCH_URL")
-    MEILISEARCH_API_KEY = get_secret_value("MEILISEARCH_API_KEY")
-    INDEX_NAME = "education-entities"
+    FUSEKI_URL = os.environ.get("FUSEKI_URL")
+    FUSEKI_USERNAME = os.environ.get("FUSEKI_USERNAME")
+    FUSEKI_PASSWORD = os.environ.get("FUSEKI_PASSWORD")
+    DATASET_NAME = os.environ.get("FUSEKI_DATASET_NAME")
+
+    MEILISEARCH_URL = os.environ.get("MEILISEARCH_URL")
+    MEILISEARCH_API_KEY = os.environ.get("MEILISEARCH_API_KEY")
+    INDEX_NAME = os.environ.get("MEILISEARCH_INDEX")
     
     auth = (FUSEKI_USERNAME, FUSEKI_PASSWORD) if FUSEKI_USERNAME and FUSEKI_PASSWORD else None
     query_url = f"{FUSEKI_URL}/{DATASET_NAME}/sparql"

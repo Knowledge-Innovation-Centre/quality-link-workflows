@@ -1,7 +1,7 @@
 triggers:
 - description: null
   envs: []
-  last_enabled_at: 2025-11-06 09:04:22.050406+00:00
+  last_enabled_at: 2026-02-08 16:23:23.009071+00:00
   name: manual_refresh
   pipeline_uuid: provider_fetch_database_batch
   schedule_interval: '@once'
@@ -13,7 +13,7 @@ triggers:
   token: b4e791b50486457c942937439ac9db0d
   variables:
     DEQAR_URL: https://backend.testzone.eqar.eu/connectapi/v1/providers/
-    QL_BUCKET_NAME: quality-link-storage
+    LIMIT: 500
 - description: null
   envs: []
   last_enabled_at: 2025-11-03 08:10:30.042692+00:00
@@ -28,4 +28,4 @@ triggers:
   token: 04961bfc538340f5b0aaf5bdaa303d66
   variables:
     DEQAR_URL: https://backend.testzone.eqar.eu/connectapi/v1/providers/
-    QL_BUCKET_NAME: quality-link-storage
+    LIMIT: 500

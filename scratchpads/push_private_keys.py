@@ -1,5 +1,5 @@
 # !pip3 install cryptography
-from mage_ai.data_preparation.shared.secrets import get_secret_value
+import os
 import psycopg2
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
@@ -11,10 +11,10 @@ from datetime import datetime
 # Configuration
 # =============================================================================
 
-pg_user = get_secret_value("POSTGRES_USER")
-pg_pass = get_secret_value("POSTGRES_PASSWORD")
-pg_host = get_secret_value("POSTGRES_HOST")
-pg_db = get_secret_value("POSTGRES_DB_NAME")
+pg_user = os.environ.get("POSTGRES_USER")
+pg_pass = os.environ.get("POSTGRES_PASSWORD")
+pg_host = os.environ.get("POSTGRES_HOST")
+pg_db = os.environ.get("POSTGRES_DB_NAME")
 
 DB_CONFIG = {
     "host": pg_host,

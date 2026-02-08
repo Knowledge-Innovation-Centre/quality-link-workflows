@@ -3,17 +3,17 @@ from typing import Callable
 
 if 'streaming_source' not in globals():
     from mage_ai.data_preparation.decorators import streaming_source
-from mage_ai.data_preparation.shared.secrets import get_secret_value
 import redis
 import time
 import json
+import os
 
 @streaming_source
 class CustomSource(BasePythonSource):
     def init_client(self):
 
-        redis_host = get_secret_value("DRAGONFLY_HOST")
-        redis_password = get_secret_value("DRAGONFLY_PASSWORD")
+        redis_host = os.environ.get("DRAGONFLY_HOST")
+        redis_password = os.environ.get("DRAGONFLY_PASSWORD")
 
         self.queue_name = "provider_data_queue"  
         self.r = redis.Redis(

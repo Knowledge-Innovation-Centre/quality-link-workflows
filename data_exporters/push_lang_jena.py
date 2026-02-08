@@ -1,18 +1,18 @@
 if 'data_exporter' not in globals():
     from mage_ai.data_preparation.decorators import data_exporter
 
-from mage_ai.data_preparation.shared.secrets import get_secret_value
+import os
 import requests
 
 
 @data_exporter
 def export_data(data, *args, **kwargs):
 
-    fuseki_url = get_secret_value("FUSEKI_URL")
-    fuseki_username = get_secret_value("FUSEKI_USERNAME")
-    fuseki_password = get_secret_value("FUSEKI_PASSWORD")
+    fuseki_url = os.environ.get("FUSEKI_URL")
+    fuseki_username = os.environ.get("FUSEKI_USERNAME")
+    fuseki_password = os.environ.get("FUSEKI_PASSWORD")
     
-    dataset_name = "pipeline-data"
+    dataset_name = os.environ.get("FUSEKI_DATASET_NAME")
     upload_url = f"{fuseki_url}/{dataset_name}/data"
     
     auth = None

@@ -1,7 +1,8 @@
+import os
+
 from typing import Dict, List
 from minio import Minio
 from minio.error import S3Error
-from mage_ai.data_preparation.shared.secrets import get_secret_value
 from datetime import datetime
 
 if 'transformer' not in globals():
@@ -16,9 +17,9 @@ def transform(curr_data, *args, **kwargs):
     try:
 
         client = Minio(
-            get_secret_value("MINIO_HOST"),
-            access_key=get_secret_value("MINIO_ROOT_USER"),
-            secret_key=get_secret_value("MINIO_ROOT_PASSWORD"),
+            os.environ.get("MINIO_HOST"),
+            access_key=os.environ.get("MINIO_ROOT_USER"),
+            secret_key=os.environ.get("MINIO_ROOT_PASSWORD"),
             secure=False
         )
         print("✅ Connected to MinIO")
@@ -26,7 +27,7 @@ def transform(curr_data, *args, **kwargs):
         print(f"❌ Error connecting to MinIO: {e}")
         return []
     
-    bucket_name = "quality-link-storage"
+    bucket_name = os.environ.get("MINIO_BUCKET_NAME")
     
     data = curr_data if isinstance(curr_data, list) else [curr_data]
     
