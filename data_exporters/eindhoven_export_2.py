@@ -1,0 +1,465 @@
+from mage_ai.data_preparation.shared.secrets import get_secret_value
+import requests
+import json
+from pyld import jsonld
+
+if 'data_exporter' not in globals():
+    from mage_ai.data_preparation.decorators import data_exporter
+
+
+def get_language_label(language_uri: str, query_url: str, auth: tuple) -> str:
+
+    query = f"""
+    PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+    
+    SELECT ?label
+    WHERE {{
+      <{language_uri}> skos:prefLabel ?label .
+      FILTER(lang(?label) = "en")
+    }}
+    LIMIT 1
+    """
+    
+    try:
+        response = requests.get(
+            query_url,
+            params={'query': query, 'format': 'application/sparql-results+json'},
+            auth=auth,
+            timeout=10
+        )
+        response.raise_for_status()
+        
+        results = response.json()['results']['bindings']
+        
+        if results:
+            return results[0]['label']['value']
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"      ⚠️  Failed to fetch label for {language_uri}: {e}")
+        return None
+
+
+@data_exporter
+def export_data(data, *args, **kwargs):
+    FUSEKI_URL = get_secret_value("FUSEKI_URL")
+    FUSEKI_USERNAME = get_secret_value("FUSEKI_USERNAME")
+    FUSEKI_PASSWORD = get_secret_value("FUSEKI_PASSWORD")
+    DATASET_NAME = "pipeline-data"
+    
+    MEILISEARCH_URL = get_secret_value("MEILISEARCH_URL")
+    MEILISEARCH_API_KEY = get_secret_value("MEILISEARCH_API_KEY")
+    INDEX_NAME = "education-entities"
+    
+    auth = (FUSEKI_USERNAME, FUSEKI_PASSWORD) if FUSEKI_USERNAME and FUSEKI_PASSWORD else None
+    query_url = f"{FUSEKI_URL}/{DATASET_NAME}/sparql"
+    
+    print("✅ Configuration loaded")
+    print(f"   Fuseki: {FUSEKI_URL}/{DATASET_NAME}")
+    print(f"   Meilisearch Index: {INDEX_NAME}")
+    
+    course_uuids = data.get('course_uuids', [])
+    
+    if not course_uuids:
+        print("⚠️  No course_uuids found in input data")
+        return {
+            "retrieved": 0,
+            "framed": 0,
+            "enriched": 0,
+            "uploaded": 0,
+            "failed": 0,
+            "course_uuids": []
+        }
+    
+    print(f"\n📋 Processing {len(course_uuids)} course UUIDs")
+    print(f"   First 3: {course_uuids[:3]}")
+    
+    try:
+        with open("ql/schema/frame.json", "r") as f:
+            frame_config = json.load(f)
+        print("✅ Frame configuration loaded from frame.json")
+    except FileNotFoundError as e:
+        print(f"❌ File not found: {e}")
+        raise 
+    
+    
+    print(f"\n{'='*60}")
+    print("📋 STEP 1: Querying for course URIs by course_uuid")
+    print(f"{'='*60}")
+    
+    course_uri_mapping = []
+    
+    for idx, course_uuid in enumerate(course_uuids, 1):
+        print(f"\n[{idx}/{len(course_uuids)}] Looking up URI for course_uuid: {course_uuid}")
+        
+        query_course_by_uuid = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX ql: <http://data.quality-link.eu/ontology/v1#>
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        
+        SELECT ?learningOpportunity ?title ?course_uuid
+        WHERE {{
+          ?learningOpportunity rdf:type ql:LearningOpportunitySpecification .
+          ?learningOpportunity ql:course_uuid ?course_uuid .
+          OPTIONAL {{ ?learningOpportunity dcterms:title ?title }}
+          
+          FILTER (?course_uuid = "{course_uuid}")
+        }}
+        LIMIT 1
+        """
+        
+        try:
+            response = requests.get(
+                query_url,
+                params={'query': query_course_by_uuid, 'format': 'application/sparql-results+json'},
+                auth=auth,
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            results = response.json()['results']['bindings']
+            
+            if not results:
+                print(f"   ⚠️  No course found for course_uuid: {course_uuid}")
+                continue
+            
+            result = results[0]
+            course_uri = result['learningOpportunity']['value']
+            title = result.get('title', {}).get('value', 'No title')
+            
+            print(f"   ✅ Found course URI: {course_uri}")
+            print(f"      Title: {title[:60]}...")
+            
+            course_uri_mapping.append({
+                'course_uuid': course_uuid,
+                'course_uri': course_uri,
+                'title': title
+            })
+            
+        except requests.RequestException as e:
+            print(f"   ❌ Query failed: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"      Response: {e.response.text[:200]}")
+            continue
+        except Exception as e:
+            print(f"   ❌ Unexpected error: {e}")
+            continue
+    
+    print(f"\n✅ Successfully found URIs for {len(course_uri_mapping)}/{len(course_uuids)} courses")
+    
+    if not course_uri_mapping:
+        print("\n⚠️  No course URIs found")
+        return {
+            "retrieved": 0,
+            "framed": 0,
+            "enriched": 0,
+            "uploaded": 0,
+            "failed": len(course_uuids),
+            "course_uuids": course_uuids
+        }
+    
+    
+    print(f"\n{'='*60}")
+    print("📥 STEP 2: Retrieving full course data via CONSTRUCT")
+    print(f"{'='*60}")
+    
+    all_documents = []
+    retrieval_failed = 0
+
+    for idx, mapping in enumerate(course_uri_mapping, 1):
+        course_uuid = mapping['course_uuid']
+        course_uri = mapping['course_uri']
+        title = mapping['title']
+        
+        print(f"\n[{idx}/{len(course_uri_mapping)}] Processing: {title[:50]}...")
+        print(f"   URI: {course_uri}")
+        print(f"   UUID: {course_uuid}")
+        
+        query_full_data = f"""
+        CONSTRUCT {{
+        <{course_uri}> ?p ?o .
+        }}
+        WHERE {{
+        <{course_uri}> ?p ?o .
+        }}
+        """
+        
+        try:
+            print(f"   🔽 Fetching complete course data...")
+            response = requests.get(
+                query_url,
+                params={'query': query_full_data, 'format': 'application/ld+json'},
+                auth=auth,
+                timeout=60
+            )
+            response.raise_for_status()
+            
+            raw_jsonld = response.json()
+            
+            # Handle both single object and @graph array formats
+            if not raw_jsonld:
+                print(f"   ⚠️  Empty response from Fuseki")
+                retrieval_failed += 1
+                continue
+            
+            # Normalize to @graph format for consistent processing downstream
+            if isinstance(raw_jsonld, dict) and '@graph' not in raw_jsonld and '@id' in raw_jsonld:
+                # Single object response - wrap in @graph
+                raw_jsonld = {'@graph': [raw_jsonld]}
+                print(f"   ✅ Retrieved single course object (normalized to @graph format)")
+            elif isinstance(raw_jsonld, dict) and '@graph' in raw_jsonld:
+                graph_size = len(raw_jsonld['@graph'])
+                print(f"   ✅ Retrieved raw JSON-LD data ({graph_size} objects)")
+            elif isinstance(raw_jsonld, list):
+                # Already a list - wrap in @graph
+                raw_jsonld = {'@graph': raw_jsonld}
+                print(f"   ✅ Retrieved raw JSON-LD data ({len(raw_jsonld['@graph'])} objects)")
+            else:
+                print(f"   ⚠️  Unexpected JSON-LD format: {type(raw_jsonld)}")
+                print(f"      Keys: {raw_jsonld.keys() if isinstance(raw_jsonld, dict) else 'N/A'}")
+                retrieval_failed += 1
+                continue
+            
+            all_documents.append({
+                'course_uuid': course_uuid,
+                'course_uri': course_uri,
+                'title': title,
+                'raw_data': raw_jsonld
+            })
+            
+        except requests.RequestException as e:
+            print(f"   ❌ Failed to retrieve data: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"      Response: {e.response.text[:200]}")
+            retrieval_failed += 1
+            continue
+        except Exception as e:
+            print(f"   ❌ Unexpected error: {e}")
+            import traceback
+            traceback.print_exc()
+            retrieval_failed += 1
+            continue
+    
+    print(f"\n✅ Successfully retrieved data for {len(all_documents)}/{len(course_uri_mapping)} courses")
+    print(f"❌ Failed retrievals: {retrieval_failed}")
+    
+    if not all_documents:
+        print("\n⚠️  No documents to process")
+        return {
+            "retrieved": 0,
+            "framed": 0,
+            "enriched": 0,
+            "uploaded": 0,
+            "failed": len(course_uuids),
+            "course_uuids": course_uuids
+        }
+    
+    print(f"\n{'='*60}")
+    print("🔄 STEP 3: Applying JSON-LD framing")
+    print(f"{'='*60}")
+    
+    framed_documents = []
+    framing_failed = 0
+    
+    for idx, doc in enumerate(all_documents, 1):
+        course_uuid = doc['course_uuid']
+        course_uri = doc['course_uri']
+        title = doc['title']
+        raw_jsonld = doc['raw_data']
+        
+        print(f"\n[{idx}/{len(all_documents)}] Framing: {title[:50]}...")
+        print(f"   Course UUID: {course_uuid}")
+        
+        try:
+            print(f"   🔄 Applying JSON-LD framing...")
+            framed_json = jsonld.frame(raw_jsonld, frame_config)
+            print(f"   ✅ Framing successful")
+            
+            if '@context' in framed_json:
+                del framed_json['@context']
+                print(f"   ✅ Removed @context")
+            
+            framed_json['id'] = course_uuid
+            print(f"   ✅ Set Meilisearch ID: {course_uuid}")
+            
+            has_title = 'dcterms:title' in framed_json
+            has_type = 'type' in framed_json or '@type' in framed_json
+            has_course_uuid = 'ql:course_uuid' in framed_json
+            has_ingested = 'ql:ingestedDate' in framed_json
+            
+            print(f"   📋 Verification:")
+            print(f"      - Has title: {has_title}")
+            print(f"      - Has type: {has_type}")
+            print(f"      - Has course_uuid: {has_course_uuid}")
+            print(f"      - Has ingestedDate: {has_ingested}")
+            
+            framed_documents.append(framed_json)
+            
+        except Exception as e:
+            print(f"   ❌ Framing failed: {e}")
+            import traceback
+            traceback.print_exc()
+            framing_failed += 1
+            continue
+    
+    print(f"\n✅ Successfully framed {len(framed_documents)}/{len(all_documents)} documents")
+    print(f"❌ Framing failures: {framing_failed}")
+    
+    if not framed_documents:
+        print("\n⚠️  No framed documents to upload")
+        return {
+            "retrieved": len(all_documents),
+            "framed": 0,
+            "enriched": 0,
+            "uploaded": 0,
+            "failed": len(all_documents),
+            "course_uuids": course_uuids
+        }
+    
+    
+    print(f"\n{'='*60}")
+    print("🏷️  STEP 3.5: Enriching with language labels")
+    print(f"{'='*60}")
+    
+    enriched_count = 0
+    enrichment_failed = 0
+    
+    for idx, doc in enumerate(framed_documents, 1):
+        course_uuid = doc.get('id', 'unknown')
+        
+        print(f"\n[{idx}/{len(framed_documents)}] Enriching course: {course_uuid}")
+        
+        language_field = doc.get('dcterms:language')
+        
+        if not language_field:
+            print(f"   ⚠️  No dcterms:language field, skipping")
+            continue
+        
+        try:
+            if isinstance(language_field, list):
+                print(f"   🔍 Found {len(language_field)} language URIs")
+                labels = []
+                
+                for lang_uri in language_field:
+                    label = get_language_label(lang_uri, query_url, auth)
+                    if label:
+                        labels.append(label)
+                        print(f"      ✅ {lang_uri} → {label}")
+                    else:
+                        print(f"      ⚠️  No label found for {lang_uri}")
+                
+                if labels:
+                    doc['dcterms:languageLabel'] = labels
+                    enriched_count += 1
+                    print(f"   ✅ Added {len(labels)} language label(s)")
+                else:
+                    print(f"   ⚠️  No labels found for any language URI")
+                    enrichment_failed += 1
+                    
+            else:
+                print(f"   🔍 Found language URI: {language_field}")
+                label = get_language_label(language_field, query_url, auth)
+                
+                if label:
+                    doc['dcterms:languageLabel'] = label
+                    enriched_count += 1
+                    print(f"   ✅ Added language label: {label}")
+                else:
+                    print(f"   ⚠️  No label found for {language_field}")
+                    enrichment_failed += 1
+                    
+        except Exception as e:
+            print(f"   ❌ Enrichment error: {e}")
+            enrichment_failed += 1
+            continue
+    
+    print(f"\n✅ Successfully enriched {enriched_count}/{len(framed_documents)} documents")
+    print(f"⚠️  Enrichment skipped/failed: {enrichment_failed}")
+    
+    
+    print(f"\n{'='*60}")
+    print("🚀 STEP 4: Uploading to Meilisearch")
+    print(f"{'='*60}")
+    
+    upload_url = f"{MEILISEARCH_URL}/indexes/{INDEX_NAME}/documents"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {MEILISEARCH_API_KEY}"
+    }
+    
+    uploaded_count = 0
+    upload_failed = 0
+    
+    for idx, doc in enumerate(framed_documents, 1):
+        course_uuid = doc.get('id', 'unknown')
+        title = doc.get('dcterms:title', 'No title')
+        
+        if isinstance(title, dict) and '@value' in title:
+            title = title['@value']
+        elif isinstance(title, list) and len(title) > 0:
+            title = title[0] if isinstance(title[0], str) else title[0].get('@value', 'No title')
+        
+        print(f"\n[{idx}/{len(framed_documents)}] Uploading: {str(title)[:60]}...")
+        print(f"   Course UUID: {course_uuid}")
+        
+        if 'dcterms:languageLabel' in doc:
+            lang_label = doc['dcterms:languageLabel']
+            if isinstance(lang_label, list):
+                print(f"   🏷️  Languages: {', '.join(lang_label)}")
+            else:
+                print(f"   🏷️  Language: {lang_label}")
+        
+        try:
+            response = requests.post(upload_url, headers=headers, json=doc)
+            response.raise_for_status()
+            
+            task_info = response.json()
+            task_uid = task_info.get('taskUid', 'N/A')
+            print(f"   ✅ Uploaded successfully (Task UID: {task_uid})")
+            uploaded_count += 1
+            
+        except requests.RequestException as e:
+            print(f"   ❌ Upload failed: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"      Response: {e.response.text[:200]}")
+            upload_failed += 1
+            continue
+        except Exception as e:
+            print(f"   ❌ Unexpected error: {e}")
+            upload_failed += 1
+            continue
+    
+    print(f"\n{'='*60}")
+    print(f"📊 FINAL SUMMARY")
+    print(f"{'='*60}")
+    print(f"📥 Total course UUIDs:        {len(course_uuids)}")
+    print(f"🔍 URIs found:                {len(course_uri_mapping)}")
+    print(f"✅ Successfully retrieved:    {len(all_documents)}")
+    print(f"🔄 Successfully framed:       {len(framed_documents)}")
+    print(f"🏷️  Successfully enriched:     {enriched_count}")
+    print(f"🚀 Successfully uploaded:     {uploaded_count}")
+    print(f"❌ Failed operations:         {(len(course_uuids) - len(course_uri_mapping)) + retrieval_failed + framing_failed + enrichment_failed + upload_failed}")
+    print(f"   - URI lookup failures:     {len(course_uuids) - len(course_uri_mapping)}")
+    print(f"   - Retrieval failures:      {retrieval_failed}")
+    print(f"   - Framing failures:        {framing_failed}")
+    print(f"   - Enrichment failures:     {enrichment_failed}")
+    print(f"   - Upload failures:         {upload_failed}")
+    print(f"{'='*60}")
+    
+    return {
+        "total_course_uuids": len(course_uuids),
+        "uris_found": len(course_uri_mapping),
+        "retrieved": len(all_documents),
+        "framed": len(framed_documents),
+        "enriched": enriched_count,
+        "uploaded": uploaded_count,
+        "failed_uri_lookups": len(course_uuids) - len(course_uri_mapping),
+        "failed_retrievals": retrieval_failed,
+        "failed_framing": framing_failed,
+        "failed_enrichment": enrichment_failed,
+        "failed_uploads": upload_failed,
+        "total_failed": (len(course_uuids) - len(course_uri_mapping)) + retrieval_failed + framing_failed + enrichment_failed + upload_failed,
+        "course_uuids": course_uuids,
+        "success_rate": f"{(uploaded_count / len(course_uuids) * 100):.1f}%" if course_uuids else "0%"
+    }
