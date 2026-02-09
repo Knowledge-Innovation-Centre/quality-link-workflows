@@ -7,20 +7,36 @@ blocks:
   executor_type: local_python
   has_callback: false
   language: python
-  name: push_private_keys
+  name: save_key_pair_db
   retry_config: null
   status: updated
   timeout: null
-  type: scratchpad
+  type: data_exporter
   upstream_blocks: []
-  uuid: push_private_keys
+  uuid: save_key_pair_db
 cache_block_output_in_memory: false
 callbacks: []
 concurrency_config: {}
-conditionals: []
+conditionals:
+- all_upstream_blocks_executed: false
+  color: null
+  configuration: {}
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: check_key_exists_db
+  retry_config: null
+  status: updated
+  timeout: null
+  type: conditional
+  upstream_blocks:
+  - save_key_pair_db
+  uuid: check_key_exists_db
 created_at: '2026-01-20 04:18:04.121798+00:00'
 data_integration: null
-description: null
+description: Check if an active private/public key pair exists and generate one otherwise
 executor_config: {}
 executor_count: 1
 executor_type: null
