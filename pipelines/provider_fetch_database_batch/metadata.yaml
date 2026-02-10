@@ -7,7 +7,7 @@ blocks:
       path: data_loaders/extract_deqar_provider.py
   downstream_blocks:
   - save_providers_db
-  - push_providers_jena
+  - providers_to_rdf
   executor_config: null
   executor_type: local_python
   has_callback: false
@@ -29,11 +29,11 @@ blocks:
   language: python
   name: push_providers_jena
   retry_config: null
-  status: executed
+  status: updated
   timeout: null
   type: data_exporter
   upstream_blocks:
-  - extract_deqar_provider
+  - providers_to_rdf
   uuid: push_providers_jena
 - all_upstream_blocks_executed: false
   color: null
@@ -51,6 +51,25 @@ blocks:
   upstream_blocks:
   - extract_deqar_provider
   uuid: save_providers_db
+- all_upstream_blocks_executed: false
+  color: null
+  configuration:
+    file_source:
+      path: transformers/providers_to_rdf.py
+  downstream_blocks:
+  - push_providers_jena
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: providers_to_rdf
+  retry_config: null
+  status: executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - extract_deqar_provider
+  uuid: providers_to_rdf
 cache_block_output_in_memory: false
 callbacks: []
 concurrency_config: {}
