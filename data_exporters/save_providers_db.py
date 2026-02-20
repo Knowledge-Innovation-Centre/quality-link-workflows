@@ -170,7 +170,7 @@ def insert_provider(conn, cursor, provider):
                 name_concat, provider_name, last_deqar_pull, 
                 last_manifest_pull, created_at, updated_at
             ) VALUES (
-                %(deqar_id)s, %(eter_id)s, %(provider_id)s, %(schac_code), %(metadata)s, %(manifest_json)s,
+                %(deqar_id)s, %(eter_id)s, %(provider_id)s, %(schac_code)s, %(metadata)s, %(manifest_json)s,
                 %(name_concat)s, %(provider_name)s, %(current_time)s,
                 NULL, %(current_time)s, %(current_time)s
             )
