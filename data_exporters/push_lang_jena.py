@@ -8,6 +8,8 @@ import requests
 @data_exporter
 def export_data(data, *args, **kwargs):
 
+    scheme_uri = kwargs.get("CONCEPT_SCHEME")
+
     fuseki_url = os.environ.get("FUSEKI_URL")
     fuseki_username = os.environ.get("FUSEKI_USERNAME")
     fuseki_password = os.environ.get("FUSEKI_PASSWORD")
@@ -33,7 +35,7 @@ def export_data(data, *args, **kwargs):
         )
         
         if upload_response.status_code == 200:
-            print(f"✅ Successfully uploaded language vocabulary to Fuseki")
+            print(f"✅ Successfully uploaded vocabulary <{scheme_uri}> to Fuseki")
             print(f"{'='*60}")
             return {
                 "success": True,

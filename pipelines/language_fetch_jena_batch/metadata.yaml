@@ -42,7 +42,7 @@ blocks:
   language: python
   name: push_lang_jena
   retry_config: null
-  status: updated
+  status: executed
   timeout: null
   type: data_exporter
   upstream_blocks:
@@ -54,7 +54,7 @@ concurrency_config: {}
 conditionals: []
 created_at: '2025-12-22 16:11:19.302426+00:00'
 data_integration: null
-description: null
+description: Fetch EU controlled vocabularies and authority tables
 executor_config: {}
 executor_count: 1
 executor_type: null
@@ -70,5 +70,7 @@ spark_config: {}
 tags: []
 type: python
 uuid: language_fetch_jena_batch
+variables:
+  CONCEPT_SCHEME: http://data.europa.eu/snb/isced-f/25831c2
 variables_dir: /home/src/mage_data/ql
 widgets: []

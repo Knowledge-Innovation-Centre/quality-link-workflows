@@ -1,0 +1,58 @@
+triggers:
+- description: null
+  envs: []
+  last_enabled_at: null
+  name: load_isced_f
+  pipeline_uuid: language_fetch_jena_batch
+  schedule_interval: '@once'
+  schedule_type: time
+  settings:
+    create_initial_pipeline_run: false
+  sla: null
+  start_time: 2026-02-20 20:52:00+00:00
+  status: inactive
+  token: b4107251e7cd4ea8afca9a32e54b575e
+  variables:
+    CONCEPT_SCHEME: http://data.europa.eu/snb/isced-f/25831c2
+- description: null
+  envs: []
+  last_enabled_at: null
+  name: load_languages
+  pipeline_uuid: language_fetch_jena_batch
+  schedule_interval: '@once'
+  schedule_type: time
+  settings: null
+  sla: null
+  start_time: 2026-02-20 20:53:00+00:00
+  status: inactive
+  token: e1f8052eb67d471197fb3680ecdf1e51
+  variables:
+    CONCEPT_SCHEME: http://publications.europa.eu/resource/authority/language
+- description: null
+  envs: []
+  last_enabled_at: null
+  name: load_eqf
+  pipeline_uuid: language_fetch_jena_batch
+  schedule_interval: '@once'
+  schedule_type: time
+  settings: null
+  sla: null
+  start_time: 2026-02-20 20:56:00+00:00
+  status: inactive
+  token: c3b27ac0f655448186a12d7b888a22cb
+  variables:
+    CONCEPT_SCHEME: http://data.europa.eu/snb/eqf/25831c2
+- description: null
+  envs: []
+  last_enabled_at: null
+  name: load_lo_type
+  pipeline_uuid: language_fetch_jena_batch
+  schedule_interval: '@once'
+  schedule_type: time
+  settings: null
+  sla: null
+  start_time: 2026-02-20 20:57:00+00:00
+  status: inactive
+  token: 92c86a54a80a4190a9ec477ef49056e9
+  variables:
+    CONCEPT_SCHEME: http://data.europa.eu/snb/learning-opportunity/25831c2
