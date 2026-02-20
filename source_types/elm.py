@@ -7,13 +7,12 @@ from urllib.parse import urlparse
 class ElmDataSource(DataSourceType):
 
     def fetch(self):
-    #(source_path: str, **kwargs):
         """
         Fetch an ELM file via HTTP GET. Returns (content_bytes, content_type).
         """
         print(f"   🔽 Downloading ELM file from: {self.source['path']}")
 
-        response = requests.get(self.source['path'], timeout=60)
+        response = self.session.get(self.source['path'], timeout=60)
         response.raise_for_status()
 
         file_extension = os.path.splitext(urlparse(self.source['path']).path)[1]
