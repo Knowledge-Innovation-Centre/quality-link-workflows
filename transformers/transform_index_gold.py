@@ -120,7 +120,7 @@ def transform(messages: List[Dict], *args, **kwargs):
             )
             r.raise_for_status()
             raw_jsonld = r.json()
-            if not raw_jsonld or (isinstance(raw_jsonld, dict) and not raw_jsonld.get('@graph')):
+            if not raw_jsonld:
                 print(f"   ⚠️ No data returned for {course_uri}")
                 failed_count += 1
                 continue
