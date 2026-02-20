@@ -8,34 +8,6 @@ if 'transformer' not in globals():
     from mage_ai.data_preparation.decorators import transformer
 
 
-def get_language_label(language_uri: str, query_url: str, auth: tuple) -> str:
-
-    query = f"""
-    PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-
-    SELECT ?label
-    WHERE {{
-      <{language_uri}> skos:prefLabel ?label .
-      FILTER(lang(?label) = "en")
-    }}
-    LIMIT 1
-    """
-
-    try:
-        response = requests.get(
-            query_url,
-            params={'query': query, 'format': 'application/sparql-results+json'},
-            auth=auth,
-            timeout=10
-        )
-        response.raise_for_status()
-        results = response.json()['results']['bindings']
-        return results[0]['label']['value'] if results else None
-    except Exception as e:
-        print(f"      ⚠️ Failed to fetch label for {language_uri}: {e}")
-        return None
-
-
 @transformer
 def transform(messages: List[Dict], *args, **kwargs):
 
@@ -94,17 +66,18 @@ def transform(messages: List[Dict], *args, **kwargs):
         query_course_by_uuid = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX ql: <http://data.quality-link.eu/ontology/v1#>
-        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX elm: <http://data.europa.eu/snb/model/elm/>
 
-        SELECT ?learningOpportunity ?title ?course_uuid
+        SELECT ?learningOpportunity
         WHERE {{
-          ?learningOpportunity rdf:type ql:LearningOpportunitySpecification .
-          ?learningOpportunity ql:course_uuid ?course_uuid .
-          OPTIONAL {{ ?learningOpportunity dcterms:title ?title }}
-
-          FILTER (?course_uuid = "{course_uuid}")
+          VALUES ?type {{
+            ql:LearningOpportunitySpecification
+            elm:Qualification
+            elm:LearningAchievementSpecification
+          }}
+          ?learningOpportunity rdf:type ?type .
+          ?learningOpportunity ql:course_uuid "{course_uuid}" .
         }}
-        LIMIT 1
         """
 
         try:
@@ -121,7 +94,6 @@ def transform(messages: List[Dict], *args, **kwargs):
                 failed_count += 1
                 continue
             course_uri = results[0]['learningOpportunity']['value']
-            print(f"   ✅ URI: {course_uri}")
         except Exception as e:
             print(f"   ❌ URI lookup failed: {e}")
             failed_count += 1
@@ -165,31 +137,16 @@ def transform(messages: List[Dict], *args, **kwargs):
             if '@context' in framed:
                 del framed['@context']
             framed['id'] = course_uuid
-            print(f"   ✅ Framed document")
         except Exception as e:
             print(f"   ❌ Framing failed: {e}")
             failed_count += 1
             continue
-
-        # Step 4: Language label enrichment
-        language_field = framed.get('dcterms:language')
-        if language_field:
-            if isinstance(language_field, list):
-                labels = [get_language_label(uri, query_url, auth) for uri in language_field]
-                labels = [l for l in labels if l]
-                if labels:
-                    framed['dcterms:languageLabel'] = labels
-            else:
-                label = get_language_label(language_field, query_url, auth)
-                if label:
-                    framed['dcterms:languageLabel'] = label
 
         # Step 5: Upload to Meilisearch
         try:
             r = requests.post(meili_url, headers=meili_headers, json=framed)
             r.raise_for_status()
             task_uid = r.json().get('taskUid', 'N/A')
-            print(f"   ✅ Uploaded to Meilisearch (Task UID: {task_uid})")
             uploaded_count += 1
         except Exception as e:
             print(f"   ❌ Meilisearch upload failed: {e}")
