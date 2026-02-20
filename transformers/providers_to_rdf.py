@@ -26,7 +26,7 @@ def providers_to_rdf(data, *args, **kwargs):
     ttl = []
     counter = 0
 
-    for provider in data[:5]:
+    for provider in data:
         graph = Graph()
         graph.bind("ql", QL)
         graph.bind("elm", ELM)
