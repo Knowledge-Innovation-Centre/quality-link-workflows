@@ -44,11 +44,12 @@ class CustomSink(BasePythonSink):
                 try:
                     provider_uuid = msg.get("provider_uuid")
                     source_version_uuid = msg.get("source_version_uuid")
-                    
+                    source_type = msg.get("source_type", "unknown")
+
                     if not provider_uuid or not source_version_uuid:
                         print(f"⚠️ Skipping message with missing fields: {msg}")
                         continue
-                    
+
                     cursor.execute("BEGIN")
                     
                     insert_query = """
@@ -61,7 +62,7 @@ class CustomSink(BasePythonSink):
                     trans_uuid = cursor.fetchone()[0]
                     
                     conn.commit()
-                    print(f"💾 Created transaction record: {trans_uuid} (Provider: {provider_uuid})")
+                    print(f"💾 Created transaction record: {trans_uuid} (Provider: {provider_uuid}, Source type: {source_type})")
                     
                 except errors.UniqueViolation:
                     conn.rollback()
