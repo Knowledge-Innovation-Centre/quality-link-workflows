@@ -60,8 +60,6 @@ def transform(messages: List[Dict], *args, **kwargs):
     failed_count = 0
 
     for idx, course_uuid in enumerate(course_uuids, 1):
-        print(f"\n[{idx}/{len(course_uuids)}] Processing course_uuid: {course_uuid}")
-
         # Step 1: SPARQL SELECT — find course URI
         query_course_by_uuid = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
