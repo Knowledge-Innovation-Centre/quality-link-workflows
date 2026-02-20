@@ -6,7 +6,7 @@ import requests
 import psycopg2
 from datetime import datetime, timezone
 import uuid
-from rdflib import Graph, Namespace, Literal, URIRef, RDF
+from rdflib import Graph, Namespace, Literal, URIRef, BNode, RDF
 from rdflib.namespace import XSD, DCTERMS
 
 if 'transformer' not in globals():
@@ -14,6 +14,27 @@ if 'transformer' not in globals():
 
 QL = Namespace("http://data.quality-link.eu/ontology/v1#")
 ELM = Namespace("http://data.europa.eu/snb/model/elm/")
+
+
+def has_type(graph, subject, *types):
+    return any((subject, RDF.type, t) in graph for t in types)
+
+
+def _collect(src: Graph, dst: Graph, node, visited: set):
+    if node in visited:
+        return
+    visited.add(node)
+    for p, o in src.predicate_objects(node):
+        dst.add((node, p, o))
+        if isinstance(o, BNode):
+            _collect(src, dst, o, visited)
+
+
+def extract_subgraph(graph: Graph, root: URIRef) -> Graph:
+    """Return a new Graph with root's triples and all reachable blank-node descendants."""
+    sub = Graph()
+    _collect(graph, sub, root, set())
+    return sub
 
 
 def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str) -> tuple:
@@ -54,11 +75,12 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str) 
 
             course_uuid = None
 
-            if (subject, RDF.type, QL.HigherEducationInstitution) in graph:
+            if has_type(graph, subject, QL.HigherEducationInstitution, ELM.Organisation):
                 hei_count += 1
                 graph.add((subject, QL.provider_uuid, Literal(provider_uuid)))
 
-            elif (subject, RDF.type, QL.LearningOpportunitySpecification) in graph:
+            elif has_type(graph, subject, QL.LearningOpportunitySpecification,
+                          ELM.Qualification, ELM.LearningAchievementSpecification):
                 los_count += 1
                 course_uuid = str(uuid.uuid5(uuid.NAMESPACE_URL, str(subject)))
                 graph.add((subject, QL.course_uuid, Literal(course_uuid)))
@@ -66,7 +88,7 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str) 
                     graph.add((subject, QL.provider_uuid, Literal(provider_uuid)))
                     los_with_publisher += 1
 
-            elif (subject, RDF.type, QL.LearningOpportunityInstance) in graph:
+            elif has_type(graph, subject, QL.LearningOpportunityInstance, ELM.LearningOpportunity):
                 loi_count += 1
                 los_uri = graph.value(subject, ELM.learningAchievementSpecification)
                 if los_uri and isinstance(los_uri, URIRef):
@@ -88,13 +110,13 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str) 
         print(f"      - LOI: {loi_count} ({loi_with_provided_by} with providedBy, {loi_with_course_link} with course link)")
         print(f"      - Course UUIDs: {len(course_uuids)}, Total triples: {len(graph)}")
 
-        return enriched_content, course_uuids
+        return enriched_content, course_uuids, graph
 
     except Exception as e:
         print(f"   ⚠️ RDF enrichment failed: {e}")
         import traceback
         traceback.print_exc()
-        return file_content, []
+        return file_content, [], None
 
 
 @transformer
@@ -145,33 +167,72 @@ def transform(messages: List[Dict], *args, **kwargs):
         return None
 
     print(f"   🔧 Enriching RDF content...")
-    enriched_content, course_uuids = enrich_rdf_graph(file_content, file_format, provider_uuid)
+    enriched_content, course_uuids, enriched_graph = enrich_rdf_graph(file_content, file_format, provider_uuid)
     print(f"   ✅ Enriched: {len(course_uuids)} course UUIDs found")
 
     fuseki_url = os.environ.get("FUSEKI_URL")
     fuseki_username = os.environ.get("FUSEKI_USERNAME")
     fuseki_password = os.environ.get("FUSEKI_PASSWORD")
     dataset_name = os.environ.get("FUSEKI_DATASET_NAME")
-    upload_url = f"{fuseki_url}/{dataset_name}/data"
     auth = (fuseki_username, fuseki_password) if fuseki_username and fuseki_password else None
 
-    try:
-        upload_response = requests.post(
-            upload_url,
-            data=enriched_content,
-            headers={"Content-Type": content_type},
-            auth=auth,
-            timeout=60
-        )
-        if upload_response.status_code == 200:
-            print(f"   ✅ Uploaded to Jena Fuseki ({dataset_name})")
-        else:
-            print(f"   ❌ Fuseki upload failed: {upload_response.status_code}")
-            print(f"      {upload_response.text[:200]}")
-            return None
-    except Exception as e:
-        print(f"❌ Fuseki upload error: {e}")
+    if enriched_graph is None:
+        print("❌ Skipping Fuseki upload — enrichment failed")
         return None
+
+    named_uris = [s for s in enriched_graph.subjects(unique=True) if isinstance(s, URIRef)]
+    update_url = f"{fuseki_url}/{dataset_name}/update"
+    failed = 0
+
+    for uri in named_uris:
+        uri_str = str(uri)
+        subgraph_nt = extract_subgraph(enriched_graph, uri).serialize(format='nt')
+
+        sparql = f"""DELETE {{
+              ?root ?p0 ?o0 .
+              ?bn1 ?p1 ?o1 .
+              ?bn2 ?p2 ?o2 .
+              ?bn3 ?p3 ?o3 .
+            }}
+            WHERE {{
+              VALUES ?root {{ <{uri_str}> }}
+              # Level 0: direct statements about root
+              ?root ?p0 ?o0 .
+              # Level 1: blank nodes directly under root
+              OPTIONAL {{
+                ?root ?px0 ?bn1 .
+                FILTER(isBlank(?bn1))
+                ?bn1 ?p1 ?o1 .
+                # Level 2: blank nodes under level-1 blank nodes
+                OPTIONAL {{
+                  ?bn1 ?px1 ?bn2 .
+                  FILTER(isBlank(?bn2))
+                  ?bn2 ?p2 ?o2 .
+                  # Level 3: blank nodes under level-2 blank nodes
+                  OPTIONAL {{
+                    ?bn2 ?px2 ?bn3 .
+                    FILTER(isBlank(?bn3))
+                    ?bn3 ?p3 ?o3 .
+                  }}
+                }}
+              }}
+            }} ;
+            INSERT DATA {{
+            {subgraph_nt}
+            }}
+        """
+
+        r = requests.post(update_url, data=sparql,
+                          headers={"Content-Type": "application/sparql-update"},
+                          auth=auth, timeout=60)
+        if r.status_code not in (200, 204):
+            print(f"   ❌ SPARQL Update failed for {uri_str}: {r.status_code}")
+            failed += 1
+
+    if failed:
+        print(f"   ⚠️ {failed}/{len(named_uris)} subjects failed to update in Fuseki ({dataset_name})")
+    else:
+        print(f"   ✅ Pushed {len(named_uris)} subjects to Fuseki ({dataset_name})")
 
     try:
         pg_conn = psycopg2.connect(
