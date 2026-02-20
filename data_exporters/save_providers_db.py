@@ -157,6 +157,7 @@ def insert_provider(conn, cursor, provider):
             'provider_id': provider.get('id'),
             'deqar_id': provider.get('deqar_id'),
             'eter_id': provider.get('eter_id'),
+            'schac_code': extract_schac_identifier(provider),
             'metadata': Json(provider),
             'manifest_json': Json(build_manifest_json(provider)),
             'name_concat': build_name_concat(provider),
@@ -165,11 +166,11 @@ def insert_provider(conn, cursor, provider):
         cursor.execute(
             """
             INSERT INTO provider (
-                deqar_id, eter_id, base_id, metadata, manifest_json, 
+                deqar_id, eter_id, base_id, schac_code, metadata, manifest_json, 
                 name_concat, provider_name, last_deqar_pull, 
                 last_manifest_pull, created_at, updated_at
             ) VALUES (
-                %(deqar_id)s, %(eter_id)s, %(provider_id)s, %(metadata)s, %(manifest_json)s,
+                %(deqar_id)s, %(eter_id)s, %(provider_id)s, %(schac_code), %(metadata)s, %(manifest_json)s,
                 %(name_concat)s, %(provider_name)s, %(current_time)s,
                 NULL, %(current_time)s, %(current_time)s
             )
@@ -191,6 +192,7 @@ def update_provider(conn, cursor, provider_uuid, provider):
             'provider_id': provider.get('id'),
             'deqar_id': provider.get('deqar_id'),
             'eter_id': provider.get('eter_id'),
+            'schac_code': extract_schac_identifier(provider),
             'metadata': Json(provider),
             'manifest_json': Json(build_manifest_json(provider)),
             'name_concat': build_name_concat(provider),
@@ -201,6 +203,7 @@ def update_provider(conn, cursor, provider_uuid, provider):
             SET
                 deqar_id = %(deqar_id)s,
                 eter_id = %(eter_id)s,
+                schac_code = %(schac_code)s,
                 metadata = %(metadata)s,
                 name_concat = %(name_concat)s,
                 provider_name = %(provider_name)s,
