@@ -3,10 +3,14 @@ from typing import Dict, List
 import requests
 import json
 from pyld import jsonld
+from rdflib import Namespace
+from rdflib.namespace import RDF, DCTERMS, OWL
 
 if 'transformer' not in globals():
     from mage_ai.data_preparation.decorators import transformer
 
+QL = Namespace("http://data.quality-link.eu/ontology/v1#")
+ELM = Namespace("http://data.europa.eu/snb/model/elm/")
 
 @transformer
 def transform(messages: List[Dict], *args, **kwargs):
@@ -62,9 +66,10 @@ def transform(messages: List[Dict], *args, **kwargs):
     for idx, course_uuid in enumerate(course_uuids, 1):
         # Step 1: SPARQL SELECT — find course URI
         query_course_by_uuid = f"""
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX ql: <http://data.quality-link.eu/ontology/v1#>
-        PREFIX elm: <http://data.europa.eu/snb/model/elm/>
+        PREFIX rdf: <{RDF}>
+        PREFIX ql: <{QL}>
+        PREFIX elm: <{ELM}>
+        PREFIX owl: <{OWL}>
 
         SELECT ?learningOpportunity
         WHERE {{
@@ -73,8 +78,8 @@ def transform(messages: List[Dict], *args, **kwargs):
             elm:Qualification
             elm:LearningAchievementSpecification
           }}
+          <urn:uuid:{course_uuid}> owl:sameAs ?learningOpportunity .
           ?learningOpportunity rdf:type ?type .
-          ?learningOpportunity ql:course_uuid "{course_uuid}" .
         }}
         """
 

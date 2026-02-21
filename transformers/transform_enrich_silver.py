@@ -7,7 +7,7 @@ import psycopg2
 from datetime import datetime, timezone
 import uuid
 from rdflib import Graph, Namespace, Literal, URIRef, BNode, RDF
-from rdflib.namespace import XSD, DCTERMS
+from rdflib.namespace import XSD, DCTERMS, OWL
 
 if 'transformer' not in globals():
     from mage_ai.data_preparation.decorators import transformer
@@ -37,13 +37,13 @@ def extract_subgraph(graph: Graph, root: URIRef) -> Graph:
     return sub
 
 
-def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str) -> tuple:
+def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str, provider_uri: str) -> tuple:
     """
     Enrich RDF graph with ingestion metadata and course UUIDs.
     Returns (enriched_bytes, course_uuids_list).
     course_uuids is local to this call, not module-level, to prevent stale state across runs.
     """
-    course_uuids = []
+    course_uuids = set()
 
     try:
         graph = Graph()
@@ -52,6 +52,7 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str) 
         graph.bind("ql", QL)
         graph.bind("elm", ELM)
         graph.bind("dcterms", DCTERMS)
+        graph.bind("owl", OWL)
 
         current_datetime = datetime.now(timezone.utc)
         current_date = current_datetime.date()
@@ -60,9 +61,13 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str) 
         hei_count = 0
         los_count = 0
         los_with_publisher = 0
+        los_publisher_injected = 0
         loi_count = 0
         loi_with_provided_by = 0
+        loi_provider_injected = 0
         loi_with_course_link = 0
+
+        owl_same_as_triples = []
 
         for subject in graph.subjects(unique=True):
             if not isinstance(subject, URIRef):
@@ -77,40 +82,45 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str) 
 
             if has_type(graph, subject, QL.HigherEducationInstitution, ELM.Organisation):
                 hei_count += 1
-                graph.add((subject, QL.provider_uuid, Literal(provider_uuid)))
+                # for now, do nothing - TO DO: try to match with provider list and add OWL.sameAs
 
             elif has_type(graph, subject, QL.LearningOpportunitySpecification,
                           ELM.Qualification, ELM.LearningAchievementSpecification):
                 los_count += 1
-                course_uuid = str(uuid.uuid5(uuid.NAMESPACE_URL, str(subject)))
-                graph.add((subject, QL.course_uuid, Literal(course_uuid)))
+                course_uuid = str(uuid.uuid5(uuid.UUID(provider_uuid), str(subject)))
+                owl_same_as_triples.append((URIRef(f"urn:uuid:{course_uuid}"), OWL.sameAs, subject))
                 if (subject, DCTERMS.publisher, None) in graph:
-                    graph.add((subject, QL.provider_uuid, Literal(provider_uuid)))
                     los_with_publisher += 1
+                elif provider_uri:
+                    graph.add((subject, DCTERMS.publisher, URIRef(provider_uri)))
+                    los_publisher_injected += 1
 
             elif has_type(graph, subject, QL.LearningOpportunityInstance, ELM.LearningOpportunity):
                 loi_count += 1
                 los_uri = graph.value(subject, ELM.learningAchievementSpecification)
                 if los_uri and isinstance(los_uri, URIRef):
-                    course_uuid = str(uuid.uuid5(uuid.NAMESPACE_URL, str(los_uri)))
-                    graph.add((subject, QL.course_uuid, Literal(course_uuid)))
                     loi_with_course_link += 1
                 if (subject, ELM.providedBy, None) in graph:
-                    graph.add((subject, QL.provider_uuid, Literal(provider_uuid)))
                     loi_with_provided_by += 1
+                elif provider_uri:
+                    graph.add((subject, ELM.providedBy, URIRef(provider_uri)))
+                    loi_provider_injected += 1
 
-            if course_uuid is not None and course_uuid not in course_uuids:
-                course_uuids.append(course_uuid)
+            if course_uuid is not None:
+                course_uuids.add(course_uuid)
+
+        for s, p, o in owl_same_as_triples:
+            graph.add((s, p, o))
 
         enriched_content = graph.serialize(format=file_format, encoding='utf-8')
 
         print(f"   📊 Enrichment stats:")
         print(f"      - Total subjects: {subjects_processed}")
-        print(f"      - HEI: {hei_count}, LOS: {los_count} ({los_with_publisher} with publisher)")
-        print(f"      - LOI: {loi_count} ({loi_with_provided_by} with providedBy, {loi_with_course_link} with course link)")
+        print(f"      - HEI: {hei_count}, LOS: {los_count} ({los_with_publisher} with publisher, {los_publisher_injected} injected)")
+        print(f"      - LOI: {loi_count} ({loi_with_provided_by} with providedBy, {loi_provider_injected} injected, {loi_with_course_link} with course link)")
         print(f"      - Course UUIDs: {len(course_uuids)}, Total triples: {len(graph)}")
 
-        return enriched_content, course_uuids, graph
+        return enriched_content, list(course_uuids), graph
 
     except Exception as e:
         print(f"   ⚠️ RDF enrichment failed: {e}")
@@ -166,8 +176,29 @@ def transform(messages: List[Dict], *args, **kwargs):
         print(f"❌ Error downloading from MinIO: {e}")
         return None
 
+    provider_uri = None
+    try:
+        pg_conn = psycopg2.connect(
+            host=os.environ.get("POSTGRES_HOST"),
+            database=os.environ.get("POSTGRES_DB_NAME"),
+            user=os.environ.get("POSTGRES_USER"),
+            password=os.environ.get("POSTGRES_PASSWORD")
+        )
+        with pg_conn.cursor() as cur:
+            cur.execute("SELECT base_id FROM provider WHERE provider_uuid = %s", (provider_uuid,))
+            row = cur.fetchone()
+            if row:
+                provider_uri = f"https://data.deqar.eu/institution/{row[0]}"
+        pg_conn.close()
+        if provider_uri:
+            print(f"   🏛️ Provider URI: {provider_uri}")
+        else:
+            print(f"   ⚠️ Could not resolve provider URI for {provider_uuid}")
+    except Exception as e:
+        print(f"   ⚠️ Provider URI lookup failed: {e}")
+
     print(f"   🔧 Enriching RDF content...")
-    enriched_content, course_uuids, enriched_graph = enrich_rdf_graph(file_content, file_format, provider_uuid)
+    enriched_content, course_uuids, enriched_graph = enrich_rdf_graph(file_content, file_format, provider_uuid, provider_uri)
     print(f"   ✅ Enriched: {len(course_uuids)} course UUIDs found")
 
     fuseki_url = os.environ.get("FUSEKI_URL")
