@@ -5,7 +5,7 @@ if 'test' not in globals():
 
 import json
 from rdflib import Graph, Namespace, Literal, URIRef, BNode
-from rdflib.namespace import RDF, XSD, DCTERMS, FOAF, SKOS
+from rdflib.namespace import RDF, XSD, DCTERMS, FOAF, SKOS, OWL
 
 QL = Namespace("http://data.quality-link.eu/ontology/v1#")
 ELM = Namespace("http://data.europa.eu/snb/model/elm/")
@@ -23,28 +23,30 @@ def providers_to_rdf(data, *args, **kwargs):
     Returns:
         RDF graph
     """
-    ttl = []
+    rdf = []
     counter = 0
 
-    for provider in data:
+    for provider_uuid, provider in data['data_updated']:
         graph = Graph()
         graph.bind("ql", QL)
         graph.bind("elm", ELM)
         graph.bind("dcterms", DCTERMS)
         graph.bind("rov", ROV)
-        deqar_to_rdf(provider, graph)
-        ttl.append(graph.serialize(format='turtle'))
+        graph.bind("owl", OWL)
+        provider_uri = deqar_to_rdf(provider, provider_uuid, graph)
+        rdf.append((provider_uri, graph.serialize(format='nt')))
         del graph
         counter += 1
 
-    print(f"Converted {counter} providers to RDF Turtle")
-    return ttl
+    print(f"Converted {counter} providers to RDF")
+    return rdf
 
 
-def deqar_to_rdf(provider_source, graph):
+def deqar_to_rdf(provider_source, provider_uuid, graph):
     """
     Inject JSON-LD context in a single provider record from DEQAR
     """
+    provider_uri = f"https://data.deqar.eu/institution/{provider_source['id']}"
     provider = {
         '@context': {
             "adms": "http://www.w3.org/ns/adms#",
@@ -66,7 +68,7 @@ def deqar_to_rdf(provider_source, graph):
             }
         },
         "@type": "ql:HigherEducationInstitution",
-        "@id": f"https://data.deqar.eu/institution/{provider_source['id']}",
+        "@id": f"{provider_uri}",
         **provider_source
     }
 
@@ -79,7 +81,9 @@ def deqar_to_rdf(provider_source, graph):
                 i['@type'] = "elm:Identifier"
 
     graph.parse(data=json.dumps(provider), format='json-ld')
-    hei = URIRef(f"https://data.deqar.eu/institution/{provider_source['id']}")
+    hei = URIRef(provider_uri)
+
+    graph.add((URIRef(f'urn:uuid:{provider_uuid}'), OWL.sameAs, hei))
 
     website = BNode()
     graph.add((hei, FOAF.homepage, website))
@@ -117,6 +121,9 @@ def deqar_to_rdf(provider_source, graph):
         else:
             graph.add((hei, SKOS.altLabel, Literal(n['name_official'])))
             graph.add((hei, SKOS.altLabel, Literal(n['name_english'])))
+
+    return provider_uri
+
 
 @test
 def test_output(output, *args) -> None:

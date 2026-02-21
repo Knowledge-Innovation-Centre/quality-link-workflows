@@ -45,6 +45,8 @@ def export_data(data, *args, **kwargs):
             "error": f"Database connection error: {e}"
         }
 
+    data_updated = []
+
     for provider in data:
         total_count += 1
         provider_id = provider.get('id')
@@ -55,16 +57,22 @@ def export_data(data, *args, **kwargs):
         if cursor.rowcount > 0:
             existing = cursor.fetchone()
             if existing['metadata'] != provider:
-                if update_provider(conn, cursor, existing['provider_uuid'], provider):
+                try:
+                    update_provider(conn, cursor, existing['provider_uuid'], provider)
+                    data_updated.append((existing['provider_uuid'], provider))
                     updated_providers_count += 1
-                else:
+                except Exception as e:
+                    print(f"❌ Error batch updating provider: {e}")
                     error_providers_count += 1
             else:
                 unchanged_providers_count += 1
         else:
-            if insert_provider(conn, cursor, provider):
+            try:
+                new_uuid = insert_provider(conn, cursor, provider)
+                data_updated.append((new_uuid, provider))
                 new_providers_count += 1
-            else:
+            except Exception as e:
+                print(f"❌ Error batch inserting provider: {e}")
                 error_providers_count += 1
 
     print(f"✅ Processed batch of {len(data)} providers.")
@@ -86,6 +94,7 @@ def export_data(data, *args, **kwargs):
         "unchanged_providers": unchanged_providers_count,
         "updated_providers": updated_providers_count,
         "error_providers": error_providers_count,
+        "data_updated": data_updated,
     }
 
 def extract_schac_identifier(provider):
@@ -174,15 +183,16 @@ def insert_provider(conn, cursor, provider):
                 %(name_concat)s, %(provider_name)s, %(current_time)s,
                 NULL, %(current_time)s, %(current_time)s
             )
+            RETURNING provider_uuid
             """,
             insert_data,
         )
+        result = cursor.fetchone()
         conn.commit()
-        return True
+        return result['provider_uuid']
     except Exception as e:
-        print(f"❌ Error batch inserting provider: {e}")
         conn.rollback()
-        return False
+        raise
 
 def update_provider(conn, cursor, provider_uuid, provider):
     try:
@@ -214,9 +224,8 @@ def update_provider(conn, cursor, provider_uuid, provider):
         conn.commit()
         return True
     except Exception as e:
-        print(f"❌ Error batch updating provider: {e}")
         conn.rollback()
-        return False
+        raise
 
 @test
 def test_output(output, *args) -> None:

@@ -22,7 +22,7 @@ def export_data(data, *args, **kwargs):
     fuseki_password = os.environ.get("FUSEKI_PASSWORD")
 
     dataset_name = os.environ.get("FUSEKI_DATASET_NAME")
-    upload_url = f"{fuseki_url}/{dataset_name}/data"
+    update_url = f"{fuseki_url}/{dataset_name}/update"
 
     auth = None
     if fuseki_username and fuseki_password:
@@ -34,19 +34,47 @@ def export_data(data, *args, **kwargs):
     success_count = 0
     failed_count = 0
 
-    for row in data:
-        headers = {"Content-Type": "text/turtle"}
-
+    for uri, rdfdata in data:
         try:
-            upload_response = requests.post(
-                upload_url,
-                data=row,
-                headers=headers,
-                auth=auth,
-                timeout=60
-            )
+            sparql = f"""DELETE {{
+                  ?root ?p0 ?o0 .
+                  ?bn1 ?p1 ?o1 .
+                  ?bn2 ?p2 ?o2 .
+                  ?bn3 ?p3 ?o3 .
+                }}
+                WHERE {{
+                  VALUES ?root {{ <{uri}> }}
+                  # Level 0: direct statements about root
+                  ?root ?p0 ?o0 .
+                  # Level 1: blank nodes directly under root
+                  OPTIONAL {{
+                    ?root ?px0 ?bn1 .
+                    FILTER(isBlank(?bn1))
+                    ?bn1 ?p1 ?o1 .
+                    # Level 2: blank nodes under level-1 blank nodes
+                    OPTIONAL {{
+                      ?bn1 ?px1 ?bn2 .
+                      FILTER(isBlank(?bn2))
+                      ?bn2 ?p2 ?o2 .
+                      # Level 3: blank nodes under level-2 blank nodes
+                      OPTIONAL {{
+                        ?bn2 ?px2 ?bn3 .
+                        FILTER(isBlank(?bn3))
+                        ?bn3 ?p3 ?o3 .
+                      }}
+                    }}
+                  }}
+                }} ;
+                INSERT DATA {{
+                {rdfdata}
+                }}
+            """
 
-            if upload_response.status_code == 200:
+            upload_response = requests.post(update_url, data=sparql,
+                              headers={"Content-Type": "application/sparql-update"},
+                              auth=auth, timeout=60)
+
+            if upload_response.status_code in (200, 204):
                 success_count += 1
             else:
                 print(f"   ❌ Fuseki upload failed: {upload_response.status_code}")
