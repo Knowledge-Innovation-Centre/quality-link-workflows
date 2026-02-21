@@ -48,10 +48,12 @@
         "elm:LearningAchievementSpecification"
     ],
     "elm:EQFLevel": {
-        "@embed": "@never"
+        "@explicit": true,
+        "skos:prefLabel": {}
     },
     "elm:ISCEDFCode": {
-        "@embed": "@never"
+        "@explicit": true,
+        "skos:prefLabel": {}
     },
     "dcterms:language": {
         "@explicit": true,
