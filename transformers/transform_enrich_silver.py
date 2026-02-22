@@ -62,13 +62,17 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str, 
         los_count = 0
         los_with_publisher = 0
         los_publisher_injected = 0
+        los_publisher_from_loi = 0
         loi_count = 0
         loi_with_provided_by = 0
         loi_provider_injected = 0
         loi_with_course_link = 0
 
         owl_same_as_triples = []
+        loi_subjects = []
+        los_subjects = []
 
+        # Pass 1: metadata timestamps + UUID generation + collect typed subjects
         for subject in graph.subjects(unique=True):
             if not isinstance(subject, URIRef):
                 continue
@@ -89,22 +93,18 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str, 
                 los_count += 1
                 course_uuid = str(uuid.uuid5(uuid.UUID(provider_uuid), str(subject)))
                 owl_same_as_triples.append((URIRef(f"urn:uuid:{course_uuid}"), OWL.sameAs, subject))
+                los_subjects.append(subject)
                 if (subject, DCTERMS.publisher, None) in graph:
                     los_with_publisher += 1
-                elif provider_uri:
-                    graph.add((subject, DCTERMS.publisher, URIRef(provider_uri)))
-                    los_publisher_injected += 1
 
             elif has_type(graph, subject, QL.LearningOpportunityInstance, ELM.LearningOpportunity):
                 loi_count += 1
                 los_uri = graph.value(subject, ELM.learningAchievementSpecification)
                 if los_uri and isinstance(los_uri, URIRef):
                     loi_with_course_link += 1
+                loi_subjects.append(subject)
                 if (subject, ELM.providedBy, None) in graph:
                     loi_with_provided_by += 1
-                elif provider_uri:
-                    graph.add((subject, ELM.providedBy, URIRef(provider_uri)))
-                    loi_provider_injected += 1
 
             if course_uuid is not None:
                 course_uuids.add(course_uuid)
@@ -112,12 +112,37 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str, 
         for s, p, o in owl_same_as_triples:
             graph.add((s, p, o))
 
+        # Pass 2: inject elm:providedBy on LOIs that are missing it
+        for loi in loi_subjects:
+            if (loi, ELM.providedBy, None) not in graph and provider_uri:
+                graph.add((loi, ELM.providedBy, URIRef(provider_uri)))
+                loi_provider_injected += 1
+
+        # Pass 3: inject dcterms:publisher on LOSes from linked LOI providers, or fall back to provider_uri
+        for los_uri in los_subjects:
+            if (los_uri, DCTERMS.publisher, None) in graph:
+                continue
+            loi_providers = set()
+            for loi in graph.subjects(ELM.learningAchievementSpecification, los_uri):
+                for p in graph.objects(loi, ELM.providedBy):
+                    loi_providers.add(p)
+            if loi_providers:
+                for p in loi_providers:
+                    graph.add((los_uri, DCTERMS.publisher, p))
+                los_publisher_from_loi += 1
+            elif provider_uri:
+                graph.add((los_uri, DCTERMS.publisher, URIRef(provider_uri)))
+                los_publisher_injected += 1
+
         enriched_content = graph.serialize(format=file_format, encoding='utf-8')
 
         print(f"   📊 Enrichment stats:")
         print(f"      - Total subjects: {subjects_processed}")
-        print(f"      - HEI: {hei_count}, LOS: {los_count} ({los_with_publisher} with publisher, {los_publisher_injected} injected)")
-        print(f"      - LOI: {loi_count} ({loi_with_provided_by} with providedBy, {loi_provider_injected} injected, {loi_with_course_link} with course link)")
+        print(f"      - HEI: {hei_count}")
+        print(f"      - LOS: {los_count} ({los_with_publisher} with publisher, "
+              f"{los_publisher_from_loi} from LOI, {los_publisher_injected} fallback injected)")
+        print(f"      - LOI: {loi_count} ({loi_with_provided_by} with providedBy, "
+              f"{loi_provider_injected} injected, {loi_with_course_link} with course link)")
         print(f"      - Course UUIDs: {len(course_uuids)}, Total triples: {len(graph)}")
 
         return enriched_content, list(course_uuids), graph
