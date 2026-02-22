@@ -36,7 +36,9 @@ def export_data(data, *args, **kwargs):
 
     for uri, rdfdata in data:
         try:
-            sparql = f"""DELETE {{
+            sparql = f"""
+                WITH <http://data.quality-link.eu/graph/reference>
+                DELETE {{
                   ?root ?p0 ?o0 .
                   ?bn1 ?p1 ?o1 .
                   ?bn2 ?p2 ?o2 .
@@ -66,7 +68,9 @@ def export_data(data, *args, **kwargs):
                   }}
                 }} ;
                 INSERT DATA {{
-                {rdfdata}
+                  GRAPH <http://data.quality-link.eu/graph/reference> {{
+                    {rdfdata}
+                  }}
                 }}
             """
 

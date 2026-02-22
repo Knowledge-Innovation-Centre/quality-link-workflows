@@ -76,6 +76,7 @@ def transform(messages: List[Dict], *args, **kwargs):
             PREFIX owl: <{OWL}>
 
             SELECT ?learningOpportunity
+            FROM <http://data.quality-link.eu/graph/courses>
             WHERE {{
               VALUES ?type {{
                 ql:LearningOpportunitySpecification
@@ -114,6 +115,9 @@ def transform(messages: List[Dict], *args, **kwargs):
             CONSTRUCT {{
               ?s ?p ?o .
             }}
+            FROM <http://data.quality-link.eu/graph/courses>
+            FROM <http://data.quality-link.eu/graph/reference>
+            FROM <http://data.quality-link.eu/graph/vocabulary>
             WHERE {{
               <{course_uri}> (<>|!<>)* ?s .
               ?s ?p ?o .

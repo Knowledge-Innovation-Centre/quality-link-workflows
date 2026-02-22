@@ -244,7 +244,8 @@ def transform(messages: List[Dict], *args, **kwargs):
         uri_str = str(uri)
         subgraph_nt = extract_subgraph(enriched_graph, uri).serialize(format='nt')
 
-        sparql = f"""DELETE {{
+        sparql = f"""WITH <http://data.quality-link.eu/graph/courses>
+            DELETE {{
               ?root ?p0 ?o0 .
               ?bn1 ?p1 ?o1 .
               ?bn2 ?p2 ?o2 .
@@ -274,7 +275,9 @@ def transform(messages: List[Dict], *args, **kwargs):
               }}
             }} ;
             INSERT DATA {{
-            {subgraph_nt}
+              GRAPH <http://data.quality-link.eu/graph/courses> {{
+              {subgraph_nt}
+              }}
             }}
         """
 

@@ -28,6 +28,7 @@ def export_data(data, *args, **kwargs):
     try:
         upload_response = requests.post(
             upload_url,
+            params={'graph':'http://data.quality-link.eu/graph/vocabulary'},
             data=data.encode("utf-8"),
             headers=headers,
             auth=auth,
