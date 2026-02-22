@@ -1,18 +1,17 @@
 from ql.source_types.base import DataSourceType
 
 import os
-import requests
 from urllib.parse import urlparse
 
 class ElmDataSource(DataSourceType):
 
-    def fetch(self):
+    def _do_fetch(self, session):
         """
         Fetch an ELM file via HTTP GET. Returns (content_bytes, content_type).
         """
         print(f"   🔽 Downloading ELM file from: {self.source['path']}")
 
-        response = self.session.get(self.source['path'], timeout=60)
+        response = session.get(self.source['path'], timeout=60)
         response.raise_for_status()
 
         file_extension = os.path.splitext(urlparse(self.source['path']).path)[1]
@@ -39,4 +38,3 @@ class ElmDataSource(DataSourceType):
                 print(f"   ❌ Unknown extension, keeping content-type.")
 
         return response.content, content_type
-

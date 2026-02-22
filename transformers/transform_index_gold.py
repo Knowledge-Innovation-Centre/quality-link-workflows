@@ -63,98 +63,103 @@ def transform(messages: List[Dict], *args, **kwargs):
     uploaded_count = 0
     failed_count = 0
 
-    for idx, course_uuid in enumerate(course_uuids, 1):
-        # Step 1: SPARQL SELECT — find course URI
-        query_course_by_uuid = f"""
-        PREFIX rdf: <{RDF}>
-        PREFIX ql: <{QL}>
-        PREFIX elm: <{ELM}>
-        PREFIX owl: <{OWL}>
+    with requests.Session() as session:
+        if auth:
+            session.auth = auth
 
-        SELECT ?learningOpportunity
-        WHERE {{
-          VALUES ?type {{
-            ql:LearningOpportunitySpecification
-            elm:Qualification
-            elm:LearningAchievementSpecification
-          }}
-          <urn:uuid:{course_uuid}> owl:sameAs ?learningOpportunity .
-          ?learningOpportunity rdf:type ?type .
-        }}
-        """
+        for idx, course_uuid in enumerate(course_uuids, 1):
+            # Step 1: SPARQL SELECT — find course URI
+            query_course_by_uuid = f"""
+            PREFIX rdf: <{RDF}>
+            PREFIX ql: <{QL}>
+            PREFIX elm: <{ELM}>
+            PREFIX owl: <{OWL}>
 
-        try:
-            r = requests.get(
-                query_url,
-                params={'query': query_course_by_uuid, 'format': 'application/sparql-results+json'},
-                auth=auth,
-                timeout=30
-            )
-            r.raise_for_status()
-            results = r.json()['results']['bindings']
-            if not results:
-                print(f"   ⚠️ No URI found for course_uuid: {course_uuid}")
+            SELECT ?learningOpportunity
+            WHERE {{
+              VALUES ?type {{
+                ql:LearningOpportunitySpecification
+                elm:Qualification
+                elm:LearningAchievementSpecification
+              }}
+              <urn:uuid:{course_uuid}> owl:sameAs ?learningOpportunity .
+              ?learningOpportunity rdf:type ?type .
+            }}
+            """
+
+            try:
+                r = session.get(
+                    query_url,
+                    params={'query': query_course_by_uuid, 'format': 'application/sparql-results+json'},
+                    timeout=30
+                )
+                r.raise_for_status()
+                results = r.json()['results']['bindings']
+                r.close()
+                if not results:
+                    print(f"   ⚠️ No URI found for course_uuid: {course_uuid}")
+                    failed_count += 1
+                    continue
+                course_uri = results[0]['learningOpportunity']['value']
+            except Exception as e:
+                print(f"   ❌ URI lookup failed: {e}")
                 failed_count += 1
                 continue
-            course_uri = results[0]['learningOpportunity']['value']
-        except Exception as e:
-            print(f"   ❌ URI lookup failed: {e}")
-            failed_count += 1
-            continue
 
-        # Step 2: SPARQL CONSTRUCT — full subgraph
-        query_full_data = f"""
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            # Step 2: SPARQL CONSTRUCT — full subgraph
+            query_full_data = f"""
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
-        CONSTRUCT {{
-          ?s ?p ?o .
-        }}
-        WHERE {{
-          <{course_uri}> (<>|!<>)* ?s .
-          ?s ?p ?o .
-        }}
-        """
+            CONSTRUCT {{
+              ?s ?p ?o .
+            }}
+            WHERE {{
+              <{course_uri}> (<>|!<>)* ?s .
+              ?s ?p ?o .
+            }}
+            """
 
-        try:
-            r = requests.get(
-                query_url,
-                params={'query': query_full_data, 'format': 'application/ld+json'},
-                auth=auth,
-                timeout=60
-            )
-            r.raise_for_status()
-            raw_jsonld = r.json()
-            if not raw_jsonld:
-                print(f"   ⚠️ No data returned for {course_uri}")
+            try:
+                r = session.get(
+                    query_url,
+                    params={'query': query_full_data, 'format': 'application/ld+json'},
+                    timeout=60
+                )
+                r.raise_for_status()
+                raw_jsonld = r.json()
+                r.close()
+                if not raw_jsonld:
+                    print(f"   ⚠️ No data returned for {course_uri}")
+                    failed_count += 1
+                    continue
+            except Exception as e:
+                print(f"   ❌ CONSTRUCT query failed: {e}")
                 failed_count += 1
                 continue
-        except Exception as e:
-            print(f"   ❌ CONSTRUCT query failed: {e}")
-            failed_count += 1
-            continue
 
-        # Step 3: JSON-LD framing
-        try:
-            framed = jsonld.frame(raw_jsonld, frame_config)
-            if '@context' in framed:
-                del framed['@context']
-            framed['id'] = course_uuid
-        except Exception as e:
-            print(f"   ❌ Framing failed: {e}")
-            failed_count += 1
-            continue
+            # Step 3: JSON-LD framing
+            try:
+                framed = jsonld.frame(raw_jsonld, frame_config)
+                if '@context' in framed:
+                    del framed['@context']
+                framed['id'] = course_uuid
+            except Exception as e:
+                print(f"   ❌ Framing failed: {e}")
+                failed_count += 1
+                continue
 
-        # Step 5: Upload to Meilisearch
-        try:
-            r = requests.post(meili_url, headers=meili_headers, json=framed)
-            r.raise_for_status()
-            task_uid = r.json().get('taskUid', 'N/A')
-            uploaded_count += 1
-        except Exception as e:
-            print(f"   ❌ Meilisearch upload failed: {e}")
-            failed_count += 1
-            continue
+            # Step 5: Upload to Meilisearch
+            try:
+                r = requests.post(meili_url, headers=meili_headers, json=framed)
+                r.raise_for_status()
+                task_uid = r.json().get('taskUid', 'N/A')
+                r.close()
+                uploaded_count += 1
+            except Exception as e:
+                print(f"   ❌ Meilisearch upload failed: {e}")
+                failed_count += 1
+                continue
 
     print(f"\n📊 Indexing complete: {uploaded_count} uploaded, {failed_count} failed")
 

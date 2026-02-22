@@ -265,6 +265,8 @@ def transform(messages: List[Dict], *args, **kwargs):
     else:
         print(f"   ✅ Pushed {len(named_uris)} subjects to Fuseki ({dataset_name})")
 
+    del enriched_graph
+
     try:
         pg_conn = psycopg2.connect(
             host=os.environ.get("POSTGRES_HOST"),

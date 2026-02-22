@@ -22,20 +22,21 @@ class DataSourceType:
 
     def __init__(self, source: Dict):
         self.source = source
-        # requests session keeps header parameters
-        self.session = requests.Session()
+        self._headers = {'user-agent': 'quality-link-aggregator/1.0.0-alpha'}
         if source['auth'] and source['auth'].get('type') == 'httpheader':
-            self.session.headers.update({ source['auth'].get('field', 'x-qualitylink-auth'): source['auth'].get('value') })
+            self._headers[source['auth'].get('field', 'x-qualitylink-auth')] = source['auth'].get('value')
         if source['headers']:
-            self.session.headers.update(source['headers'])
-        self.session.headers['user-agent'] = 'quality-link-aggregator/1.0.0-alpha'
-
+            self._headers.update(source['headers'])
 
     def fetch(self):
         """
-        This method should fetch data and return a tuple of:
+        Opens a session, delegates to _do_fetch(), and closes the session on exit.
 
-        (fetched data converted to RDF as bytes, MIME content-type)
+        Returns (fetched data converted to RDF as bytes, MIME content-type).
         """
-        raise NotImplemented
+        with requests.Session() as session:
+            session.headers.update(self._headers)
+            return self._do_fetch(session)
 
+    def _do_fetch(self, session):
+        raise NotImplementedError

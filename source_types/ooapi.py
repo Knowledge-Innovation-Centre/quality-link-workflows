@@ -18,9 +18,9 @@ class OoapiDataSource(DataSourceType):
     OOAPI (v5) data source
     """
 
-    def fetch(self):
+    def _do_fetch(self, session):
         """
-        Fetch an ELM file via HTTP GET. Returns (content_bytes, content_type).
+        Fetch OOAPI courses via paginated HTTP GET. Returns (content_bytes, content_type).
         """
 
         url = urljoin(self.source['path'], 'courses')
@@ -47,7 +47,7 @@ class OoapiDataSource(DataSourceType):
 
         while has_next_page:
             params['pageNumber'] += 1
-            response = self.session.get(url, params=params, timeout=60)
+            response = session.get(url, params=params, timeout=60)
             response.raise_for_status()
             data = response.json()
 
