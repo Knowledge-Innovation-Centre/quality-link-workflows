@@ -37,7 +37,43 @@ def extract_subgraph(graph: Graph, root: URIRef) -> Graph:
     return sub
 
 
-def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str, provider_uri: str) -> tuple:
+def fetch_same_as_map(fuseki_url: str, dataset_name: str, auth) -> dict:
+    """
+    Query the reference graph for owl:sameAs identity links and return a
+    dict mapping alias URI string → canonical URI string.
+    Returns {} on any error (graceful degradation).
+    """
+    query = """
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX ql:  <http://data.quality-link.eu/ontology/v1#>
+PREFIX elm: <http://data.europa.eu/snb/model/elm/>
+
+SELECT ?uriA ?uriB
+FROM <http://data.quality-link.eu/graph/reference>
+WHERE {
+  ?uriA owl:sameAs ?uriB .
+  ?uriB rdf:type ?type .
+  VALUES ?type { ql:HigherEducationInstitution elm:Organisation }
+}
+"""
+    try:
+        r = requests.get(
+            f"{fuseki_url}/{dataset_name}/sparql",
+            params={"query": query, "format": "application/sparql-results+json"},
+            auth=auth,
+            timeout=30,
+        )
+        r.raise_for_status()
+        bindings = r.json()["results"]["bindings"]
+        return {b["uriA"]["value"]: b["uriB"]["value"] for b in bindings}
+    except Exception as e:
+        print(f"   ⚠️ Could not load owl:sameAs map from reference graph: {e}")
+        return {}
+
+
+def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str, provider_uri: str,
+                     same_as_map: dict = None) -> tuple:
     """
     Enrich RDF graph with ingestion metadata and course UUIDs.
     Returns (enriched_bytes, course_uuids_list).
@@ -63,6 +99,7 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str, 
         los_with_publisher = 0
         los_publisher_injected = 0
         los_publisher_from_loi = 0
+        los_publisher_normalized = 0
         loi_count = 0
         loi_with_provided_by = 0
         loi_provider_injected = 0
@@ -118,8 +155,17 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str, 
                 graph.add((loi, ELM.providedBy, URIRef(provider_uri)))
                 loi_provider_injected += 1
 
-        # Pass 3: inject dcterms:publisher on LOSes from linked LOI providers, or fall back to provider_uri
+        # Pass 3: add isActive by default and inject dcterms:publisher on LOSes from linked LOI providers, or fall back to provider_uri
         for los_uri in los_subjects:
+            if (los_uri, QL.isActive, None) not in graph:
+                graph.add((los_uri, QL.isActive, Literal(True)))
+            # Normalise any existing publishers via owl:sameAs map
+            if same_as_map:
+                for pub in list(graph.objects(los_uri, DCTERMS.publisher)):
+                    if isinstance(pub, URIRef) and str(pub) in same_as_map:
+                        graph.remove((los_uri, DCTERMS.publisher, pub))
+                        graph.add((los_uri, DCTERMS.publisher, URIRef(same_as_map[str(pub)])))
+                        los_publisher_normalized += 1
             if (los_uri, DCTERMS.publisher, None) in graph:
                 continue
             loi_providers = set()
@@ -128,7 +174,8 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str, 
                     loi_providers.add(p)
             if loi_providers:
                 for p in loi_providers:
-                    graph.add((los_uri, DCTERMS.publisher, p))
+                    canonical = URIRef(same_as_map[str(p)]) if same_as_map and str(p) in same_as_map else p
+                    graph.add((los_uri, DCTERMS.publisher, canonical))
                 los_publisher_from_loi += 1
             elif provider_uri:
                 graph.add((los_uri, DCTERMS.publisher, URIRef(provider_uri)))
@@ -140,7 +187,8 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str, 
         print(f"      - Total subjects: {subjects_processed}")
         print(f"      - HEI: {hei_count}")
         print(f"      - LOS: {los_count} ({los_with_publisher} with publisher, "
-              f"{los_publisher_from_loi} from LOI, {los_publisher_injected} fallback injected)")
+              f"{los_publisher_from_loi} from LOI, {los_publisher_injected} fallback injected, "
+              f"{los_publisher_normalized} normalized)")
         print(f"      - LOI: {loi_count} ({loi_with_provided_by} with providedBy, "
               f"{loi_provider_injected} injected, {loi_with_course_link} with course link)")
         print(f"      - Course UUIDs: {len(course_uuids)}, Total triples: {len(graph)}")
@@ -222,15 +270,18 @@ def transform(messages: List[Dict], *args, **kwargs):
     except Exception as e:
         print(f"   ⚠️ Provider URI lookup failed: {e}")
 
-    print(f"   🔧 Enriching RDF content...")
-    enriched_content, course_uuids, enriched_graph = enrich_rdf_graph(file_content, file_format, provider_uuid, provider_uri)
-    print(f"   ✅ Enriched: {len(course_uuids)} course UUIDs found")
-
     fuseki_url = os.environ.get("FUSEKI_URL")
     fuseki_username = os.environ.get("FUSEKI_USERNAME")
     fuseki_password = os.environ.get("FUSEKI_PASSWORD")
     dataset_name = os.environ.get("FUSEKI_DATASET_NAME")
     auth = (fuseki_username, fuseki_password) if fuseki_username and fuseki_password else None
+
+    same_as_map = fetch_same_as_map(fuseki_url, dataset_name, auth)
+    print(f"   🔗 Loaded {len(same_as_map)} owl:sameAs mappings from reference graph")
+
+    print(f"   🔧 Enriching RDF content...")
+    enriched_content, course_uuids, enriched_graph = enrich_rdf_graph(file_content, file_format, provider_uuid, provider_uri, same_as_map)
+    print(f"   ✅ Enriched: {len(course_uuids)} course UUIDs found")
 
     if enriched_graph is None:
         print("❌ Skipping Fuseki upload — enrichment failed")
