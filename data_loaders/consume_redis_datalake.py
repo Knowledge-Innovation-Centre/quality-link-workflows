@@ -36,33 +36,24 @@ class CustomSource(BasePythonSource):
         Batch read messages from the Redis queue and process them with the handler.
         """
         print(f"🔄 Starting batch reader on queue '{self.queue_name}'")
-        
-        while True:
-            try:
 
-                result = self.r.brpop(self.queue_name, timeout=1)
+        while True:
+            result = self.r.brpop(self.queue_name, timeout=5)
+            if result is None:
+                continue
+
+            queue_name, message = result
+
+            try:
+                if isinstance(message, bytes):
+                    message = message.decode('utf-8')
+
+                record = json.loads(message)
+
+                print(f"📝 Processing item from {queue_name}")
+                handler(record)
                 
-                if result is None:
-                    continue
-                    
-                queue_name, message = result
-                
-                try:
-                    if isinstance(message, bytes):
-                        message = message.decode('utf-8')
-                    
-                    record = json.loads(message)
-                    print(f"📝 Processing item from {queue_name}")
-                    
-                    handler([record])
-                    
-                except json.JSONDecodeError as e:
-                    print(f"⚠️ Failed to parse JSON: {str(e)}")
-                    print(f"⚠️ Raw message: {message[:100]}...")
-                    
-                except Exception as e:
-                    print(f"❌ Error processing message: {str(e)}")
-                    
-            except Exception as e:
-                print(f"❌ Queue operation error: {str(e)}")
-                time.sleep(1)
+            except json.JSONDecodeError as e:
+                print(f"⚠️ Failed to parse JSON: {str(e)}")
+                print(f"⚠️ Raw message: {message[:100]}...")
+

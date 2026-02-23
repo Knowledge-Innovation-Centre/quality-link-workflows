@@ -9,8 +9,10 @@ from rdflib.namespace import RDF, SKOS
 
 @transformer
 def transform(data, *args, **kwargs):
-    
-    print(f"📥 Input: {len(data)} language entries")
+
+    scheme_uri = URIRef(kwargs.get("CONCEPT_SCHEME"))
+
+    print(f"📥 Input: {len(data)} concepts in {scheme_uri}")
     
     g = Graph()
     
@@ -18,11 +20,12 @@ def transform(data, *args, **kwargs):
     g.bind("rdf", RDF)
     
     for item in data:
-        language_uri = URIRef(item["language_uri"])
+        concept_uri = URIRef(item["concept_uri"])
         label = item["label_en"]
         
-        g.add((language_uri, RDF.type, SKOS.Concept))
-        g.add((language_uri, SKOS.prefLabel, Literal(label, lang='en')))
+        g.add((concept_uri, RDF.type, SKOS.Concept))
+        g.add((concept_uri, SKOS.prefLabel, Literal(label, lang='en')))
+        g.add((concept_uri, SKOS.inScheme, scheme_uri))
     
     turtle_string = g.serialize(format='turtle')
     

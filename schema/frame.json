@@ -8,6 +8,8 @@
         "dcterms": "http://purl.org/dc/terms/",
         "adms": "http://www.w3.org/ns/adms#",
         "skos": "http://www.w3.org/2004/02/skos/core#",
+        "regorg": "http://www.w3.org/ns/regorg#",
+        "foaf": "http://xmlns.com/foaf/0.1/",
         "dcterms:title": {
             "@language": "en"
         },
@@ -19,6 +21,12 @@
         },
         "dcterms:modified": {
             "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+        },
+        "ql:ingestedAt": {
+            "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+        },
+        "ql:ingestedDate": {
+            "@type": "http://www.w3.org/2001/XMLSchema#date"
         },
         "elm:schemeId": {
             "@type": "@id"
@@ -47,14 +55,29 @@
         "elm:Qualification",
         "elm:LearningAchievementSpecification"
     ],
+    "elm:learningOutcome": {
+        "@explicit": true,
+        "dcterms:title": {},
+        "elm:additionalNote": {},
+        "elm:relatedESCOSkill": {}
+    },
     "elm:EQFLevel": {
-        "@embed": "@never"
+        "@explicit": true,
+        "skos:prefLabel": {}
     },
     "elm:ISCEDFCode": {
-        "@embed": "@never"
+        "@explicit": true,
+        "skos:prefLabel": {}
     },
     "dcterms:language": {
         "@explicit": true,
         "skos:prefLabel": {}
+    },
+    "dcterms:publisher": {
+        "@explicit": true,
+        "skos:prefLabel": {},
+        "regorg:legalName": {},
+        "foaf:homepage": {},
+        "elm:location": {}
     }
 }

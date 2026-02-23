@@ -9,30 +9,47 @@ import requests
 @data_loader
 def load_data(*args, **kwargs):
 
-    url = "https://publications.europa.eu/webapi/rdf/sparql?default-graph-uri=&query=PREFIX+skos%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2004%2F02%2Fskos%2Fcore%23%3E%0D%0A%0D%0ASELECT+distinct+%3Flanguage_uri+%3Flabel_en%0D%0A%0D%0AFROM++%3Chttp%3A%2F%2Fpublications.europa.eu%2Fresource%2Fauthority%2Flanguage%3E%0D%0A%0D%0AWHERE+%7B%0D%0A++++%3Flanguage_uri+a+skos%3AConcept+.%0D%0A++++%3Flanguage_uri+skos%3AprefLabel+%3Flabel_en+.%0D%0A++++filter%28lang%28%3Flabel_en%29+%3D+%22en%22%29%0D%0A%7D&format=application%2Fsparql-results%2Bjson&timeout=0&debug=on&run=+Run+Query+"
+    scheme_uri = kwargs.get("CONCEPT_SCHEME")
+
+    query = f"""PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+
+        SELECT distinct ?concept_uri ?label_en
+
+        FROM <{scheme_uri}>
+
+        WHERE {{
+            ?concept_uri a skos:Concept .
+            ?concept_uri skos:prefLabel ?label_en .
+            filter(lang(?label_en) = "en")
+        }}
+    """
     
     try:
-        response = requests.get(url, timeout=60)
+        response = requests.get("https://publications.europa.eu/webapi/rdf/sparql", timeout=60, params={
+            'query': query,
+            'format': 'application/sparql-results+json',
+            'timeout': '0',
+        })
         response.raise_for_status()
         
         data = response.json()
         
         bindings = data.get("results", {}).get("bindings", [])
         
-        print(f"✅ Retrieved {len(bindings)} language entries")
+        print(f"✅ Retrieved {len(bindings)} controlled vocabulary labels for {scheme_uri}")
         
-        languages = []
+        concepts = []
         for binding in bindings:
-            language_uri = binding.get("language_uri", {}).get("value")
+            concept_uri = binding.get("concept_uri", {}).get("value")
             label_en = binding.get("label_en", {}).get("value")
             
-            if language_uri and label_en:
-                languages.append({
-                    "language_uri": language_uri,
+            if concept_uri and label_en:
+                concepts.append({
+                    "concept_uri": concept_uri,
                     "label_en": label_en
                 })
         
-        return languages
+        return concepts
         
     except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching data: {e}")
@@ -42,17 +59,12 @@ def load_data(*args, **kwargs):
         raise
 
 
-# @test
-# def test_output(output, *args) -> None:
+@test
+def test_output(output, *args) -> None:
 
-#     assert output is not None, 'The output is undefined'
-#     assert isinstance(output, list), 'Output should be a list'
-#     assert len(output) > 0, 'Output list is empty'
+    assert output is not None, 'The output is undefined'
     
-#     first_item = output[0]
-#     assert 'language_uri' in first_item, 'Missing language_uri key'
-#     assert 'label_en' in first_item, 'Missing label_en key'
-#     assert first_item['language_uri'].startswith('http'), 'language_uri should be a URI'
-#     assert len(first_item['label_en']) > 0, 'label_en should not be empty'
-    
-#     print(f"✅ Test passed: {len(output)} language records loaded")
+    assert 'concept_uri' in output, 'Missing concept_uri key'
+    assert 'label_en' in output, 'Missing label_en key'
+    assert output['concept_uri'].startswith('http'), 'concept_uri should be a URI'
+    assert len(output['label_en']) > 0, 'label_en should not be empty'

@@ -6,7 +6,7 @@ blocks:
     file_source:
       path: data_loaders/consume_redis_datalake.py
   downstream_blocks:
-  - transform_redis_datalake
+  - transform_fetch_bronze
   executor_config: null
   executor_type: local_python
   has_callback: false
@@ -21,23 +21,63 @@ blocks:
 - all_upstream_blocks_executed: false
   color: null
   configuration:
-    file_path: transformers/transform_redis_datalake.py
+    file_path: transformers/transform_fetch_bronze.py
     file_source:
-      path: transformers/transform_redis_datalake.py
+      path: transformers/transform_fetch_bronze.py
   downstream_blocks:
-  - write_redis_datalake
+  - transform_enrich_silver
   executor_config: null
   executor_type: local_python
   has_callback: false
   language: python
-  name: transform_redis_datalake
+  name: transform_fetch_bronze
   retry_config: null
   status: updated
   timeout: null
   type: transformer
   upstream_blocks:
   - consume_redis_datalake
-  uuid: transform_redis_datalake
+  uuid: transform_fetch_bronze
+- all_upstream_blocks_executed: false
+  color: null
+  configuration:
+    file_path: transformers/transform_enrich_silver.py
+    file_source:
+      path: transformers/transform_enrich_silver.py
+  downstream_blocks:
+  - transform_index_gold
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: transform_enrich_silver
+  retry_config: null
+  status: updated
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - transform_fetch_bronze
+  uuid: transform_enrich_silver
+- all_upstream_blocks_executed: false
+  color: null
+  configuration:
+    file_path: transformers/transform_index_gold.py
+    file_source:
+      path: transformers/transform_index_gold.py
+  downstream_blocks:
+  - write_redis_datalake
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: transform_index_gold
+  retry_config: null
+  status: updated
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - transform_enrich_silver
+  uuid: transform_index_gold
 - all_upstream_blocks_executed: false
   color: null
   configuration:
@@ -55,7 +95,7 @@ blocks:
   timeout: null
   type: data_exporter
   upstream_blocks:
-  - transform_redis_datalake
+  - transform_index_gold
   uuid: write_redis_datalake
 cache_block_output_in_memory: false
 callbacks: []
