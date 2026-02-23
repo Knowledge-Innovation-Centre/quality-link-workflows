@@ -42,7 +42,7 @@ blocks:
   language: python
   name: push_lang_jena
   retry_config: null
-  status: executed
+  status: updated
   timeout: null
   type: data_exporter
   upstream_blocks:
