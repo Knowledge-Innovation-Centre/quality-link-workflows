@@ -19,6 +19,9 @@
         "skos:prefLabel": {
             "@language": "en"
         },
+        "elm:noteLiteral": {
+            "@language": "en"
+        },
         "dcterms:modified": {
             "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
         },
@@ -60,6 +63,10 @@
         "dcterms:title": {},
         "elm:additionalNote": {},
         "elm:relatedESCOSkill": {}
+    },
+    "elm:learningOutcomeSummary": {
+        "@explicit": true,
+        "elm:noteLiteral": {}
     },
     "elm:EQFLevel": {
         "@explicit": true,
