@@ -128,6 +128,12 @@ class OoapiDataSource(DataSourceType):
             graph.add((code, ELM.schemeName, Literal(course['primaryCode'].get('codeType'))))
             graph.add((course_uri, ADMS.identifier, code))
 
+        if course.get('abbreviation'):
+            abbreviation = BNode()
+            graph.add((abbreviation, RDF.type, ELM.Identifier))
+            graph.add((abbreviation, SKOS.notation, Literal(course['abbreviation'])))
+            graph.add((course_uri, ADMS.identifier, abbreviation))
+
         if course.get('name'):
             title = self.extract_english_value(course.get('name'))
             if title:
@@ -139,9 +145,16 @@ class OoapiDataSource(DataSourceType):
                 graph.add((course_uri, DCTERMS.description, Literal(description, lang='en')))
 
         if course.get('learningOutcomes'):
-            outcomes = self.extract_english_value(course.get('learningOutcomes'))
+            outcomes = [
+                v for outcome in course['learningOutcomes']
+                if (v := self.extract_english_value(outcome))
+            ]
             if outcomes:
-                graph.add((course_uri, ELM.learningOutcomeDescription, Literal(outcomes, lang='en')))
+                losummary = BNode()
+                graph.add((losummary, RDF.type, ELM.Note))
+                for outcome in outcomes:
+                    graph.add((losummary, ELM.noteLiteral, Literal(outcome, lang='en')))
+                graph.add((course_uri, ELM.learningOutcomeSummary, losummary))
 
         if course.get('studyLoad') and isinstance(course['studyLoad'], dict) and course['studyLoad'].get('value'):
             if course['studyLoad'].get('studyLoadUnit', 'ects') == 'ects':
@@ -159,7 +172,7 @@ class OoapiDataSource(DataSourceType):
         if course.get('teachingLanguage'):
             lang_code = course.get('teachingLanguage')
             if isinstance(lang_code, str):
-                graph.add((course_uri, DCTERMS.language, URIRef(f"http://publications.europa.eu/resource/authority/language/{lang_code}")))
+                graph.add((course_uri, DCTERMS.language, URIRef(f"http://publications.europa.eu/resource/authority/language/{lang_code.upper()}")))
 
         if fields := course.get('fieldsOfStudy'):
             if isinstance(fields, list):
