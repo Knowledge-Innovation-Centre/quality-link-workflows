@@ -4,19 +4,30 @@ import os
 import requests
 from urllib.parse import urlparse, urljoin
 
-from rdflib import Graph, Namespace, Literal, URIRef, RDF
-from rdflib.namespace import XSD, DCTERMS
-from datetime import datetime, timezone
+from rdflib import Graph, Namespace, Literal, URIRef, BNode, RDF
+from rdflib.namespace import XSD, DCTERMS, OWL, SKOS, FOAF
 import uuid
 from typing import Dict, List, Any
 
 QL = Namespace("http://data.quality-link.eu/ontology/v1#")
 ELM = Namespace("http://data.europa.eu/snb/model/elm/")
+ADMS = Namespace("http://www.w3.org/ns/adms#")
 
 class OoapiDataSource(DataSourceType):
     """
     OOAPI (v5) data source
     """
+
+    LEVEL_MAP = {
+        "secondary vocational education 1": URIRef("http://data.europa.eu/snb/eqf/1"),
+        "secondary vocational education 2": URIRef("http://data.europa.eu/snb/eqf/2"),
+        "secondary vocational education 3": URIRef("http://data.europa.eu/snb/eqf/3"),
+        "secondary vocational education 4": URIRef("http://data.europa.eu/snb/eqf/4"),
+        "associate degree": URIRef("http://data.europa.eu/snb/eqf/5"),
+        "bachelor": URIRef("http://data.europa.eu/snb/eqf/6"),
+        "master": URIRef("http://data.europa.eu/snb/eqf/7"),
+        "doctoral": URIRef("http://data.europa.eu/snb/eqf/8"),
+    }
 
     def _do_fetch(self, session):
         """
@@ -103,22 +114,19 @@ class OoapiDataSource(DataSourceType):
             print(f"   ⚠️ Skipping course without courseId")
             return None
 
-        provider_uri = URIRef(f"http://data.quality-link.eu/providers/{self.source['provider_uuid']}")
         course_uri = URIRef(f"http://data.quality-link.eu/providers/{self.source['provider_uuid']}/courses/{courseId}")
         course_uuid = str(uuid.uuid5(uuid.NAMESPACE_URL, str(course_uri)))
 
         graph.add((course_uri, RDF.type, QL.LearningOpportunitySpecification))
 
-        graph.add((course_uri, QL.course_uuid, Literal(course_uuid)))
-        graph.add((course_uri, QL.provider_uuid, Literal(self.source['provider_uuid'])))
+        graph.add((URIRef(f"urn:uuid:{course_uuid}"), OWL.sameAs, course_uri))
 
-        current_datetime = datetime.now(timezone.utc)
-        current_date = current_datetime.date()
-        graph.add((course_uri, QL.ingestedDate, Literal(current_date, datatype=XSD.date)))
-        graph.add((course_uri, QL.ingestedAt, Literal(current_datetime, datatype=XSD.dateTime)))
-
-        if course.get('primaryCode'):
-            graph.add((course_uri, DCTERMS.identifier, Literal(course.get('primaryCode'))))
+        if course.get('primaryCode') and isinstance(course['primaryCode'], dict):
+            code = BNode()
+            graph.add((code, RDF.type, ELM.Identifier))
+            graph.add((code, SKOS.notation, Literal(course['primaryCode'].get('code'))))
+            graph.add((code, ELM.schemeName, Literal(course['primaryCode'].get('codeType'))))
+            graph.add((course_uri, ADMS.identifier, code))
 
         if course.get('name'):
             title = self.extract_english_value(course.get('name'))
@@ -135,30 +143,37 @@ class OoapiDataSource(DataSourceType):
             if outcomes:
                 graph.add((course_uri, ELM.learningOutcomeDescription, Literal(outcomes, lang='en')))
 
-        if course.get('studyLoad'):
-            study_load = course['studyLoad']
-            if isinstance(study_load, dict) and study_load.get('value'):
+        if course.get('studyLoad') and isinstance(course['studyLoad'], dict) and course['studyLoad'].get('value'):
+            if course['studyLoad'].get('studyLoadUnit', 'ects') == 'ects':
+                ects = BNode()
+                graph.add((ects, ELM.point, Literal(course['studyLoad']['value'], datatype=XSD.decimal)))
+                graph.add((ects, ELM.framework, URIRef("http://data.europa.eu/snb/education-credit/6fcec5c5af")))
+                graph.add((course_uri, ELM.creditPoint, ects))
+            else:
                 graph.add((course_uri, ELM.volumeOfLearning, Literal(study_load['value'], datatype=XSD.decimal)))
 
         if course.get('level'):
-            graph.add((course_uri, ELM.ISCEDFCode, Literal(course.get('level'))))
+            if course['level'] in self.LEVEL_MAP:
+                graph.add((course_uri, ELM.EQFLevel, self.LEVEL_MAP[course['level']]))
 
         if course.get('teachingLanguage'):
             lang_code = course.get('teachingLanguage')
             if isinstance(lang_code, str):
-                graph.add((course_uri, DCTERMS.language, Literal(lang_code)))
+                graph.add((course_uri, DCTERMS.language, URIRef(f"http://publications.europa.eu/resource/authority/language/{lang_code}")))
 
-        if course.get('fieldsOfStudy'):
-            fields = course.get('fieldsOfStudy')
+        if fields := course.get('fieldsOfStudy'):
             if isinstance(fields, list):
                 for field in fields:
                     if isinstance(field, str):
-                        graph.add((course_uri, ELM.thematicArea, Literal(field)))
+                        graph.add((course_uri, ELM.ISCEDFCode, URIRef(f'http://data.europa.eu/snb/isced-f/{field}')))
+            elif isinstance(fields, str):
+                graph.add((course_uri, ELM.ISCEDFCode, URIRef(f'http://data.europa.eu/snb/isced-f/{fields}')))
 
         if course.get('link'):
-            graph.add((course_uri, ELM.homePage, URIRef(course.get('link'))))
-
-        graph.add((course_uri, DCTERMS.publisher, provider_uri))
+            web = BNode()
+            graph.add((web, RDF.type, ELM.WebResource))
+            graph.add((web, ELM.contentUrl, Literal(course.get('link'))))
+            graph.add((course_uri, FOAF.homepage, web))
 
         return course_uuid
 
