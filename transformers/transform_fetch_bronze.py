@@ -17,11 +17,12 @@ if 'transformer' not in globals():
 from ql.source_types.base import DataSourceType
 from ql.source_types.elm import ElmDataSource
 from ql.source_types.ooapi import OoapiDataSource
+from ql.source_types.eduapi import EduApiDataSource
 
 HANDLERS = {
     "elm": ElmDataSource,
     "ooapi": OoapiDataSource,
-    #"edu-api": EduApiDataSource,
+    "edu-api": EduApiDataSource,
     #"occapi": OccapiDataSource,
 }
 
