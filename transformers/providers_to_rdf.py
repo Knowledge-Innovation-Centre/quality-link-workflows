@@ -124,10 +124,3 @@ def deqar_to_rdf(provider_source, provider_uuid, graph):
 
     return provider_uri
 
-
-@test
-def test_output(output, *args) -> None:
-    """
-    Template code for testing the output of the block.
-    """
-    assert output is not None, 'The output is undefined'
