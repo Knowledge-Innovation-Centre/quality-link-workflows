@@ -1,3 +1,5 @@
+from prefect import task
+
 import os
 from typing import Dict, List
 from minio import Minio
@@ -8,9 +10,6 @@ from datetime import datetime, timezone
 import uuid
 from rdflib import Graph, Namespace, Literal, URIRef, BNode, RDF
 from rdflib.namespace import XSD, DCTERMS, OWL
-
-if 'transformer' not in globals():
-    from mage_ai.data_preparation.decorators import transformer
 
 QL = Namespace("http://data.quality-link.eu/ontology/v1#")
 ELM = Namespace("http://data.europa.eu/snb/model/elm/")
@@ -40,7 +39,7 @@ def extract_subgraph(graph: Graph, root: URIRef) -> Graph:
 def fetch_same_as_map(fuseki_url: str, dataset_name: str, auth) -> dict:
     """
     Query the reference graph for owl:sameAs identity links and return a
-    dict mapping alias URI string → canonical URI string.
+    dict mapping alias URI string -> canonical URI string.
     Returns {} on any error (graceful degradation).
     """
     query = """
@@ -123,7 +122,6 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str, 
 
             if has_type(graph, subject, QL.HigherEducationInstitution, ELM.Organisation):
                 hei_count += 1
-                # for now, do nothing - TO DO: try to match with provider list and add OWL.sameAs
 
             elif has_type(graph, subject, QL.LearningOpportunitySpecification,
                           ELM.Qualification, ELM.LearningAchievementSpecification):
@@ -202,8 +200,8 @@ def enrich_rdf_graph(file_content: bytes, file_format: str, provider_uuid: str, 
         return file_content, [], None
 
 
-@transformer
-def transform(messages: List[Dict], *args, **kwargs):
+@task(name="transform_enrich_silver")
+def transform_enrich_silver(messages: List[Dict]):
 
     message = messages[0] if messages else None
     if message is None:

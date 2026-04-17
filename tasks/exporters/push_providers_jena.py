@@ -1,22 +1,11 @@
-if 'data_exporter' not in globals():
-    from mage_ai.data_preparation.decorators import data_exporter
+from prefect import task
 
 import os
 import requests
 
-@data_exporter
-def export_data(data, *args, **kwargs):
-    """
-    Write provider data to Jena
 
-    Args:
-        data: array of RDF Turtle data ready for pushing to Jena
-
-    Output (optional):
-        Optionally return any object and it'll be logged and
-        displayed when inspecting the block run.
-    """
-
+@task(name="push_providers_jena")
+def push_providers_jena(data):
     fuseki_url = os.environ.get("FUSEKI_URL")
     fuseki_username = os.environ.get("FUSEKI_USERNAME")
     fuseki_password = os.environ.get("FUSEKI_PASSWORD")

@@ -1,18 +1,18 @@
-if 'condition' not in globals():
-    from mage_ai.data_preparation.decorators import condition
+from prefect import task
 
 import os
 import psycopg2
 from datetime import datetime
 
-@condition
-def need_to_generate_key(*args, **kwargs) -> bool:
+
+@task(name="check_key_exists_db")
+def check_key_exists_db() -> bool:
     """
-    Check if a key pair already exists in the backend database
+    Check if a key pair already exists in the backend database.
 
     Returns:
-        False if key exists (= no run needed)
-        True if it does not exist (= need to generate)
+        True if no active key exists (= need to generate)
+        False if an active key is found (= no generation needed)
     """
 
     try:
@@ -26,10 +26,7 @@ def need_to_generate_key(*args, **kwargs) -> bool:
         cursor = conn.cursor()
     except Exception as e:
         print(f"❌ Error connecting to database: {e}")
-        return {
-            "success": False,
-            "error": f"Database connection error: {e}"
-        }
+        return True
 
     print(f"\n🔍 Verifying keys in database...")
 
@@ -59,14 +56,11 @@ def need_to_generate_key(*args, **kwargs) -> bool:
             print(f"   Created: {result[4]}")
             print(f"   Updated: {result[5]}")
 
-            # return value used as condition for next block
             return False
         else:
             print(f"❌ No active key found in database.")
-            # return value used as condition for next block
             return True
 
     except Exception as e:
         print(f"❌ Error fetching existing keys: {e}")
-        # return value used as condition for next block
         return True

@@ -1,7 +1,4 @@
-if 'data_exporter' not in globals():
-    from mage_ai.data_preparation.decorators import data_exporter
-if 'condition' not in globals():
-    from mage_ai.data_preparation.decorators import condition
+from prefect import task
 
 import os
 import psycopg2
@@ -11,29 +8,14 @@ from cryptography.hazmat.backends import default_backend
 import hashlib
 from datetime import datetime
 
-@condition
-def should_i_run(active_key_exists, *args, **kwargs):
-    return False if active_key_exists else True
 
-
-@data_exporter
-def export_data(*args, **kwargs):
-    """
-    Generates a key pair and saves them to the DB
-
-    Args:
-        active_key_exists: True or False result from upstream block. Generate only if False
-
-    Output (optional):
-        Diagnostic data on newly generated key pair
-    """
-    KEY_SIZE = kwargs.get('KEY_SIZE', 4096)
-    PUBLIC_EXPONENT = kwargs.get('PUBLIC_EXPONENT', 65537)
+@task(name="save_key_pair_db")
+def save_key_pair_db(key_size: int = 4096, public_exponent: int = 65537):
 
     print("🔑 Generating private key (4096-bit RSA)...")
     private_key = rsa.generate_private_key(
-        public_exponent=PUBLIC_EXPONENT,
-        key_size=KEY_SIZE,
+        public_exponent=public_exponent,
+        key_size=key_size,
         backend=default_backend()
     )
     public_key = private_key.public_key()
@@ -87,8 +69,8 @@ def export_data(*args, **kwargs):
             public_pem_str,
             private_pem_str,
             'RSA',
-            KEY_SIZE,
-            PUBLIC_EXPONENT,
+            key_size,
+            public_exponent,
             'PEM'
         ))
         cred_uuid, created_at = cursor.fetchone()

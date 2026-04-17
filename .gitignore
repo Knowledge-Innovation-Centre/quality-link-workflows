@@ -1,8 +1,5 @@
-# MageAI hidden files and directories
-.file_versions/
-.ssh_tunnel/
-.preferences.yaml
-/metadata.yaml
+# Prefect
+.prefectignore
 
 # Python cache files and directories
 __pycache__/

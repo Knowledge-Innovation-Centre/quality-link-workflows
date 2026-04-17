@@ -1,7 +1,4 @@
-if 'transformer' not in globals():
-    from mage_ai.data_preparation.decorators import transformer
-if 'test' not in globals():
-    from mage_ai.data_preparation.decorators import test
+from prefect import task
 
 import json
 from rdflib import Graph, Namespace, Literal, URIRef, BNode
@@ -12,17 +9,9 @@ ELM = Namespace("http://data.europa.eu/snb/model/elm/")
 ADMS = Namespace("http://www.w3.org/ns/adms#")
 ROV = Namespace("http://www.w3.org/ns/regorg#")
 
-@transformer
-def providers_to_rdf(data, *args, **kwargs):
-    """
-    Convert DEQAR provider data to RDF graphs
 
-    Args:
-        data: output from the block fetching DEQAR data
-
-    Returns:
-        RDF graph
-    """
+@task(name="providers_to_rdf")
+def providers_to_rdf(data):
     rdf = []
     counter = 0
 
@@ -43,9 +32,6 @@ def providers_to_rdf(data, *args, **kwargs):
 
 
 def deqar_to_rdf(provider_source, provider_uuid, graph):
-    """
-    Inject JSON-LD context in a single provider record from DEQAR
-    """
     provider_uri = f"https://data.deqar.eu/institution/{provider_source['id']}"
     provider = {
         '@context': {
@@ -107,11 +93,9 @@ def deqar_to_rdf(provider_source, provider_uuid, graph):
     for l in provider['locations']:
         location = BNode()
         address = BNode()
-        #geo = BNode()
         graph.add((hei, ELM.location, location))
         graph.add((location, RDF.type, DCTERMS.Location))
         graph.add((location, ELM.address, address))
-        #graph.add((location, LOCN.geometry, geo))
         graph.add((address, RDF.type, ELM.Address))
         graph.add((address, ELM.countryCode, URIRef(f'http://publications.europa.eu/resource/authority/country/{l["country"]["iso_3166_alpha3"]}')))
 
@@ -123,4 +107,3 @@ def deqar_to_rdf(provider_source, provider_uuid, graph):
             graph.add((hei, SKOS.altLabel, Literal(n['name_english'])))
 
     return provider_uri
-

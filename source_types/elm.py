@@ -1,4 +1,4 @@
-from ql.source_types.base import DataSourceType
+from source_types.base import DataSourceType
 
 import os
 from urllib.parse import urlparse

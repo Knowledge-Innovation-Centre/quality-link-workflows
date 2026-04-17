@@ -1,3 +1,5 @@
+from prefect import task
+
 import os
 from typing import Dict, List
 from minio import Minio
@@ -10,25 +12,20 @@ from urllib.parse import urlparse
 import psycopg2
 from contextlib import closing
 
-if 'transformer' not in globals():
-    from mage_ai.data_preparation.decorators import transformer
-
-# need to add new data source types here
-from ql.source_types.base import DataSourceType
-from ql.source_types.elm import ElmDataSource
-from ql.source_types.ooapi import OoapiDataSource
-from ql.source_types.eduapi import EduApiDataSource
+from source_types.base import DataSourceType
+from source_types.elm import ElmDataSource
+from source_types.ooapi import OoapiDataSource
+from source_types.eduapi import EduApiDataSource
 
 HANDLERS = {
     "elm": ElmDataSource,
     "ooapi": OoapiDataSource,
     "edu-api": EduApiDataSource,
-    #"occapi": OccapiDataSource,
 }
 
 
-@transformer
-def transform(message: Dict, *args, **kwargs):
+@task(name="transform_fetch_bronze")
+def transform_fetch_bronze(message: Dict):
 
     today = datetime.now()
     date_str = today.strftime("%Y-%m-%d")

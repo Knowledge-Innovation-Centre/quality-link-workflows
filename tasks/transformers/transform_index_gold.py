@@ -1,4 +1,7 @@
+from prefect import task
+
 import os
+from pathlib import Path
 from typing import Dict, List
 import requests
 import json
@@ -6,14 +9,14 @@ from pyld import jsonld
 from rdflib import Namespace
 from rdflib.namespace import RDF, DCTERMS, OWL
 
-if 'transformer' not in globals():
-    from mage_ai.data_preparation.decorators import transformer
-
 QL = Namespace("http://data.quality-link.eu/ontology/v1#")
 ELM = Namespace("http://data.europa.eu/snb/model/elm/")
 
-@transformer
-def transform(messages: List[Dict], *args, **kwargs):
+FRAME_PATH = Path(__file__).resolve().parent.parent.parent / "schema" / "frame.json"
+
+
+@task(name="transform_index_gold")
+def transform_index_gold(messages: List[Dict]):
 
     message = messages[0] if messages else None
     if message is None:
@@ -47,7 +50,7 @@ def transform(messages: List[Dict], *args, **kwargs):
     query_url = f"{FUSEKI_URL}/{DATASET_NAME}/sparql"
 
     try:
-        with open("ql/schema/frame.json", "r") as f:
+        with open(FRAME_PATH, "r") as f:
             frame_config = json.load(f)
         print("✅ Loaded frame.json")
     except FileNotFoundError as e:
@@ -153,7 +156,7 @@ def transform(messages: List[Dict], *args, **kwargs):
                 failed_count += 1
                 continue
 
-            # Step 5: Upload to Meilisearch
+            # Step 4: Upload to Meilisearch
             try:
                 r = requests.post(meili_url, headers=meili_headers, json=framed)
                 r.raise_for_status()

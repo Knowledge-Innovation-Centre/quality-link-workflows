@@ -1,5 +1,4 @@
-if 'data_exporter' not in globals():
-    from mage_ai.data_preparation.decorators import data_exporter
+from prefect import task
 
 import os
 import psycopg2
@@ -10,19 +9,9 @@ import time
 import uuid
 import re
 
-@data_exporter
-def export_data(data, *args, **kwargs):
-    """
-    Exports data to some source.
 
-    Args:
-        data: The output from the upstream parent block
-        args: The output from any additional upstream blocks (if applicable)
-
-    Output (optional):
-        Optionally return any object and it'll be logged and
-        displayed when inspecting the block run.
-    """
+@task(name="save_providers_db")
+def save_providers_db(data):
     total_count = 0
     new_providers_count = 0
     updated_providers_count = 0
@@ -97,12 +86,14 @@ def export_data(data, *args, **kwargs):
         "data_updated": data_updated,
     }
 
+
 def extract_schac_identifier(provider):
     identifiers = provider.get('identifiers', [])
     for identifier in identifiers:
         if identifier.get('resource') == 'SCHAC':
             return identifier.get('identifier')
     return None
+
 
 def clean_website_url(url):
     if not url:
@@ -112,6 +103,7 @@ def clean_website_url(url):
     url = re.sub(r'^www\.', '', url)
     url = url.rstrip('/')
     return url
+
 
 def build_manifest_json(provider):
     manifest_json = []
@@ -134,6 +126,7 @@ def build_manifest_json(provider):
         manifest_json.append({"domain": clean_website, "type": ".well-known", "check": False, "path": None})
 
     return manifest_json
+
 
 def build_name_concat(provider):
     name_parts = []
@@ -159,6 +152,7 @@ def build_name_concat(provider):
 
     return " ".join(name_parts)
 
+
 def insert_provider(conn, cursor, provider):
     try:
         insert_data = {
@@ -175,8 +169,8 @@ def insert_provider(conn, cursor, provider):
         cursor.execute(
             """
             INSERT INTO provider (
-                deqar_id, eter_id, base_id, schac_code, metadata, manifest_json, 
-                name_concat, provider_name, last_deqar_pull, 
+                deqar_id, eter_id, base_id, schac_code, metadata, manifest_json,
+                name_concat, provider_name, last_deqar_pull,
                 last_manifest_pull, created_at, updated_at
             ) VALUES (
                 %(deqar_id)s, %(eter_id)s, %(provider_id)s, %(schac_code)s, %(metadata)s, %(manifest_json)s,
@@ -193,6 +187,7 @@ def insert_provider(conn, cursor, provider):
     except Exception as e:
         conn.rollback()
         raise
+
 
 def update_provider(conn, cursor, provider_uuid, provider):
     try:
@@ -226,20 +221,3 @@ def update_provider(conn, cursor, provider_uuid, provider):
     except Exception as e:
         conn.rollback()
         raise
-
-@test
-def test_output(output, *args) -> None:
-
-    assert output is not None, 'The output is undefined'
-    assert output.get("total_count", 0) > 0, 'No providers processed'
-    assert "new_providers" in output, 'New providers count is missing'
-    assert "updated_providers" in output, 'Updated providers count is missing'
-    assert "unchanged_providers" in output, 'Unchanged providers count is missing'
-    assert "error_providers" in output, 'Error count is missing'
-
-    total = output.get("total_count", 0)
-    new = output.get("new_providers", 0)
-    updated = output.get("updated_providers", 0)
-    unchanged = output.get("unchanged_providers", 0)
-    errors = output.get("error_providers", 0)
-    assert total == (new + updated + unchanged + errors), 'Provider counts do not add up'
