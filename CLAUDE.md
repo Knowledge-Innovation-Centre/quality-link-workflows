@@ -22,7 +22,7 @@ prefect.yaml        — Deployment definitions with schedules and parameters
 
 ## Running Pipelines
 
-Pipelines are managed through Prefect. Install dependencies and run:
+### Local development
 
 ```bash
 pip install -r requirements.txt
@@ -33,6 +33,32 @@ python flows/provider_fetch.py
 # Or deploy to Prefect server
 prefect deploy --all
 ```
+
+### Managing dependencies
+
+Direct deps live in `requirements.in` (hand-edited). The pinned lockfile `requirements.txt` is generated via [`pip-tools`](https://pip-tools.readthedocs.io/) and is what Docker installs.
+
+```bash
+pip install pip-tools            # one-time
+# add/remove entries in requirements.in, then:
+pip-compile requirements.in      # regenerates requirements.txt
+pip-compile --upgrade requirements.in   # bump all pins
+```
+
+Commit both files. Never edit `requirements.txt` by hand.
+
+### Docker (self-hosted Prefect)
+
+Two-container stack: `prefect-server` (UI + API on port 4200, SQLite-backed) and `prefect-worker` (runs all deployments from a `default-pool` process work pool).
+
+```bash
+cp .env.example .env   # fill in credentials for Postgres, MinIO, Fuseki, Meilisearch
+docker compose up -d --build
+```
+
+On worker startup the entrypoint script (`docker/entrypoint-worker.sh`) waits for the server, creates the work pool if missing, runs `prefect deploy --all`, then starts the worker. Flow history persists in the `prefect-data` named volume.
+
+The Prefect UI is at `http://localhost:4200`. Trigger `process-course-message` via `POST /api/deployments/{id}/create_flow_run` from your producer.
 
 ## Data Architecture (Bronze → Silver → Gold)
 

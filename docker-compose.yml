@@ -1,0 +1,39 @@
+services:
+  prefect-server:
+    build: .
+    image: quality-link-prefect:latest
+    restart: unless-stopped
+    command: prefect server start --host 0.0.0.0
+    env_file:
+      - .env
+    environment:
+      PREFECT_SERVER_API_HOST: 0.0.0.0
+      PREFECT_SERVER_API_PORT: "4200"
+      PREFECT_UI_API_URL: http://localhost:4200/api
+    ports:
+      - "4200:4200"
+    volumes:
+      - prefect-data:/root/.prefect
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  prefect-worker:
+    build: .
+    image: quality-link-prefect:latest
+    restart: unless-stopped
+    command: /app/docker/entrypoint-worker.sh
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+      WORK_POOL_NAME: default-pool
+
+volumes:
+  prefect-data:

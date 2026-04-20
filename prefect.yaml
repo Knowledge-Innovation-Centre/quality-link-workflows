@@ -2,6 +2,8 @@ deployments:
   # Provider fetch — daily scheduled
   - name: provider-fetch-daily
     entrypoint: flows/provider_fetch.py:provider_fetch_database_batch
+    work_pool:
+      name: default-pool
     schedule:
       cron: "0 2 * * *"
     parameters:
@@ -11,6 +13,8 @@ deployments:
   # Provider fetch — manual trigger
   - name: provider-fetch-manual
     entrypoint: flows/provider_fetch.py:provider_fetch_database_batch
+    work_pool:
+      name: default-pool
     parameters:
       api_base_url: "https://backend.testzone.eqar.eu/connectapi/v1/providers/"
       limit: 500
@@ -18,32 +22,46 @@ deployments:
   # Course processing — triggered per message via Prefect API
   - name: process-course-message
     entrypoint: flows/process_course.py:process_course_message
+    work_pool:
+      name: default-pool
 
   # Vocabulary loaders — manual triggers with different concept schemes
   - name: vocab-fetch-isced-f
     entrypoint: flows/vocab_fetch.py:vocab_fetch_jena_batch
+    work_pool:
+      name: default-pool
     parameters:
       concept_scheme: "http://data.europa.eu/snb/isced-f/25831c2"
 
   - name: vocab-fetch-languages
     entrypoint: flows/vocab_fetch.py:vocab_fetch_jena_batch
+    work_pool:
+      name: default-pool
     parameters:
       concept_scheme: "http://publications.europa.eu/resource/authority/language"
 
   - name: vocab-fetch-eqf
     entrypoint: flows/vocab_fetch.py:vocab_fetch_jena_batch
+    work_pool:
+      name: default-pool
     parameters:
       concept_scheme: "http://data.europa.eu/snb/eqf/25831c2"
 
   - name: vocab-fetch-lo-type
     entrypoint: flows/vocab_fetch.py:vocab_fetch_jena_batch
+    work_pool:
+      name: default-pool
     parameters:
       concept_scheme: "http://data.europa.eu/snb/learning-opportunity/25831c2"
 
   # Key pair generation — run once on deployment startup
   - name: push-private-keys
     entrypoint: flows/push_private_keys.py:push_private_keys
+    work_pool:
+      name: default-pool
 
   # Manual reindex
   - name: reindex-courses
     entrypoint: flows/reindex_courses.py:reindex_courses
+    work_pool:
+      name: default-pool

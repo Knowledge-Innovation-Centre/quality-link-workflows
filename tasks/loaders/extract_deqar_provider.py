@@ -7,8 +7,6 @@ import re
 from datetime import datetime
 import time
 import uuid
-import pandas as pd
-from io import StringIO
 
 
 @task(name="extract_deqar_provider", retries=1, retry_delay_seconds=30)
