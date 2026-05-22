@@ -1,10 +1,10 @@
-
 # QL-Pipeline MageAI Workflows
 
+> [!IMPORTANT]
+> This is an archived repository, the QualityLink pipeline no longer uses MageAI. The workflows have been integrated in the [quality-link-infra](https://github.com/Knowledge-Innovation-Centre/quality-link-infra) repository.
 
 
 This repository contains the **MageAI ETL pipeline configurations** for the **Quality Link Pipeline (QL-Pipeline)**, a comprehensive data integration platform that processes educational data from European universities and quality assurance organizations.
-
 
 
 ---
